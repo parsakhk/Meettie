@@ -1,11 +1,12 @@
 # Meettie
 
-Meettie is a scheduling application, inspired by Calendly, built with React and powered by Vercel Postgres.
+Meettie is a minimal and premium scheduling application, built with React and powered by Vercel Postgres.
 
 ## Current State
 
-- Initialized as a React project using Vite.
-- React Router is installed and configured with a basic home page (`/`).
+- Built the initial home page step-by-step with a minimal, UX-friendly premium design.
+- Implemented a responsive Navbar with a theme switcher (light/dark mode) and a login button, including hover effects.
+- Added a Hero section featuring a welcome message and a CSS-based, theme-adaptive calendar graphic with transparent background style.
 - The project is ready to connect with a Vercel Postgres Database.
 - `.env` template is set up (and hidden from Git via `.gitignore`).
 
@@ -24,5 +25,5 @@ Meettie is a scheduling application, inspired by Calendly, built with React and 
 ## Next Steps
 
 - Design the database schema for users and events.
-- Set up Prisma or another ORM to interact with the Vercel database.
-- Build the UI components for event creation and scheduling.
+- Set up an ORM (like Prisma or Drizzle) to interact with the Postgres database.
+- Build the authentication flow and the dashboard UI components.
