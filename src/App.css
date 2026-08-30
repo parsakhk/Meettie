@@ -29,6 +29,13 @@
   letter-spacing: -0.05em;
   color: var(--text);
   transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-logo-icon {
+  color: var(--primary);
 }
 
 .nav-logo:hover {
@@ -163,6 +170,137 @@
   filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.4));
 }
 
+/* Divider */
+.divider {
+  border: 0;
+  height: 1px;
+  background: var(--border);
+  margin: 2rem auto;
+  width: calc(100% - 4rem);
+  max-width: 1200px;
+}
+
+/* Features */
+.features-section {
+  padding: 4rem 2rem 6rem;
+}
+
+.features-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6rem;
+}
+
+.feature-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4rem;
+}
+
+.feature-row.reverse {
+  flex-direction: row-reverse;
+}
+
+.feature-text {
+  flex: 1;
+}
+
+.feature-text h2 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.feature-text p {
+  font-size: 1.125rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.feature-image {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  background: #ffffff; /* AI images have a white bg, keep container white for blending */
+  border-radius: 24px;
+  padding: 1rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+}
+
+.ai-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  mix-blend-mode: multiply; /* Helps blend white background of the image to the white card */
+}
+
+[data-theme="dark"] .feature-image {
+  background: #1a1a1a;
+}
+
+[data-theme="dark"] .ai-image {
+  /* In dark mode, invert the image so the white bg becomes dark, preserving the aesthetic */
+  filter: invert(1) hue-rotate(180deg);
+  mix-blend-mode: screen; 
+  opacity: 0.9;
+}
+
+/* Footer */
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 3rem 2rem;
+  background-color: var(--bg);
+  margin-top: auto;
+}
+
+.footer-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.footer-logo-icon {
+  color: var(--text-muted);
+}
+
+.footer-socials {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.footer-socials a {
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+}
+
+.footer-socials a:hover {
+  color: var(--primary);
+}
+
+.footer-bottom {
+  max-width: 1200px;
+  margin: 2rem auto 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
 @media (max-width: 900px) {
   .hero-section {
     flex-direction: column;
@@ -176,5 +314,20 @@
   
   .hero-title {
     font-size: 2.5rem;
+  }
+
+  .feature-row, .feature-row.reverse {
+    flex-direction: column;
+    text-align: center;
+    gap: 2rem;
+  }
+  
+  .features-container {
+    gap: 4rem;
+  }
+
+  .footer-container {
+    flex-direction: column;
+    gap: 1.5rem;
   }
 }

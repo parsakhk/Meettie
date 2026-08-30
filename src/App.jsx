@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import './App.css';
 
+// Import feature images
+import imgBusinessCalendar from './assets/features/business_calendar.jpg';
+import imgBookingTime from './assets/features/booking_time.jpg';
+import imgChatOwner from './assets/features/chat_owner.jpg';
+import imgManageCalendar from './assets/features/manage_calendar.jpg';
+import imgVideoMeet from './assets/features/video_meet.jpg';
+
 function CalendarGraphic() {
   return (
     <div className="calendar-graphic">
@@ -39,7 +46,16 @@ function Navbar({ theme, toggleTheme }) {
   return (
     <nav className="navbar">
       <div className="nav-container">
-        <Link to="/" className="nav-logo">Meettie</Link>
+        <Link to="/" className="nav-logo">
+          <svg className="nav-logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+            <rect x="8" y="14" width="2" height="2"></rect>
+          </svg>
+          Meettie
+        </Link>
         <div className="nav-actions">
           <button className="theme-switcher" onClick={toggleTheme} aria-label="Toggle Theme">
             {theme === 'light' ? (
@@ -86,10 +102,98 @@ function Hero() {
   );
 }
 
+function Features() {
+  const featuresList = [
+    {
+      title: "Create Calendars for Your Business",
+      description: "Easily set up and manage custom calendars tailored to your business needs, giving your clients a seamless booking experience.",
+      image: imgBusinessCalendar,
+      reverse: false
+    },
+    {
+      title: "Set the Time for Booking",
+      description: "You have complete control over your availability. Set custom time slots so you only get booked when you want to.",
+      image: imgBookingTime,
+      reverse: true
+    },
+    {
+      title: "Chat with the Owner",
+      description: "Keep communication fluid. Clients can easily chat with the owner of the calendar before or after booking.",
+      image: imgChatOwner,
+      reverse: false
+    },
+    {
+      title: "Manage Google Calendar",
+      description: "This site is able to manage and sync automatically with your Google Calendar, preventing double bookings effortlessly.",
+      image: imgManageCalendar,
+      reverse: true
+    },
+    {
+      title: "Connect Using Google Meet",
+      description: "Automatically generate meeting links. Connect with each other using Google Meet seamlessly when an event is scheduled.",
+      image: imgVideoMeet,
+      reverse: false
+    }
+  ];
+
+  return (
+    <section className="features-section">
+      <div className="features-container">
+        {featuresList.map((feature, index) => (
+          <div className={`feature-row ${feature.reverse ? 'reverse' : ''}`} key={index}>
+            <div className="feature-text">
+              <h2>{feature.title}</h2>
+              <p>{feature.description}</p>
+            </div>
+            <div className="feature-image">
+              <img src={feature.image} alt={feature.title} className="ai-image" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="footer">
+      <div className="footer-container">
+        <div className="footer-logo">
+          <svg className="footer-logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+            <rect x="8" y="14" width="2" height="2"></rect>
+          </svg>
+          Meettie
+        </div>
+        <div className="footer-socials">
+          <a href="#" aria-label="Twitter">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"></path></svg>
+          </a>
+          <a href="#" aria-label="LinkedIn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
+          </a>
+          <a href="#" aria-label="Instagram">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+          </a>
+        </div>
+      </div>
+      <div className="footer-bottom">
+        <p>&copy; {new Date().getFullYear()} Meettie. All rights reserved.</p>
+      </div>
+    </footer>
+  );
+}
+
 function Home() {
   return (
     <div className="home-page">
       <Hero />
+      <hr className="divider" />
+      <Features />
     </div>
   );
 }
@@ -124,6 +228,7 @@ function App() {
             <Route path="/" element={<Home />} />
           </Routes>
         </main>
+        <Footer />
       </div>
     </BrowserRouter>
   );
