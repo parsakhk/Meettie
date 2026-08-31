@@ -7,7 +7,10 @@ Meettie is a minimal and premium scheduling application, built with React and po
 - Built the initial home page step-by-step with a minimal, UX-friendly premium design.
 - Implemented a responsive Navbar with a theme switcher (light/dark mode) and a login button, including hover effects.
 - Added a Hero section featuring a welcome message and a CSS-based, theme-adaptive calendar graphic with transparent background style.
-- The project is ready to connect with a Vercel Postgres Database.
+- Created Authentication pages (`/login` and `/register`) with theme-adaptive SVG line-art visuals.
+- Designed form layouts for login and registration with custom styling for light and dark modes.
+- Set up client-side routing using `react-router-dom`.
+- The project is ready to connect with a Postgres Database.
 - `.env` template is set up (and hidden from Git via `.gitignore`).
 
 ## Running the project locally
@@ -26,4 +29,5 @@ Meettie is a minimal and premium scheduling application, built with React and po
 
 - Design the database schema for users and events.
 - Set up an ORM (like Prisma or Drizzle) to interact with the Postgres database.
-- Build the authentication flow and the dashboard UI components.
+- Hook up the frontend Authentication forms with a real backend/auth provider.
+- Build the user dashboard UI components.

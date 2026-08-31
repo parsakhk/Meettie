@@ -188,6 +188,113 @@ function Footer() {
   );
 }
 
+function LoginGraphic() {
+  return (
+    <div className="auth-graphic">
+      <svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 200H220" stroke="var(--primary)" strokeWidth="6" strokeLinecap="round"/>
+        <rect x="60" y="40" width="120" height="160" rx="8" stroke="var(--border)" strokeWidth="6"/>
+        <path d="M60 40 L140 20 V180 L60 200 Z" fill="var(--bg)" stroke="var(--border)" strokeWidth="6" strokeLinejoin="round"/>
+        <circle cx="125" cy="110" r="4" fill="var(--border)"/>
+        <path d="M150 120 H210 M170 100 L150 120 L170 140" stroke="var(--primary)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </div>
+  );
+}
+
+function RegisterGraphic() {
+  return (
+    <div className="auth-graphic">
+      <svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="120" cy="80" r="40" stroke="var(--border)" strokeWidth="6"/>
+        <path d="M50 200 C50 150, 80 140, 120 140 C160 140, 190 150, 190 200" stroke="var(--border)" strokeWidth="6" strokeLinecap="round"/>
+        <circle cx="180" cy="140" r="24" fill="var(--bg)" stroke="var(--primary)" strokeWidth="6"/>
+        <path d="M180 125 V155 M165 140 H195" stroke="var(--primary)" strokeWidth="6" strokeLinecap="round"/>
+      </svg>
+    </div>
+  );
+}
+
+function Login() {
+  return (
+    <div className="auth-page">
+      <div className="auth-container">
+        <div className="auth-form-section">
+          <h1 className="auth-title">Welcome back</h1>
+          <p className="auth-subtitle">Log in to manage your schedule and meetings.</p>
+          <form className="auth-form" onSubmit={(e) => e.preventDefault()}>
+            <div className="form-group">
+              <label className="auth-label" htmlFor="email">Email</label>
+              <input type="email" id="email" className="auth-input" placeholder="you@example.com" />
+            </div>
+            <div className="form-group">
+              <label className="auth-label" htmlFor="password">Password</label>
+              <input type="password" id="password" className="auth-input" placeholder="••••••••" />
+            </div>
+            <button type="submit" className="primary-button auth-submit">Log In</button>
+          </form>
+          <div className="auth-link">
+            Don't have an account? <Link to="/register">Register here</Link>
+          </div>
+        </div>
+        <div className="auth-visual-section">
+          <LoginGraphic />
+          <p className="auth-visual-text">Access your dashboard and start organizing your business today.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Register() {
+  return (
+    <div className="auth-page">
+      <div className="auth-container">
+        <div className="auth-form-section">
+          <h1 className="auth-title">Create an account</h1>
+          <p className="auth-subtitle">Join Meettie to simplify your bookings.</p>
+          <form className="auth-form" onSubmit={(e) => e.preventDefault()}>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="auth-label" htmlFor="firstName">Name</label>
+                <input type="text" id="firstName" className="auth-input" placeholder="Jane" />
+              </div>
+              <div className="form-group">
+                <label className="auth-label" htmlFor="lastName">Last Name</label>
+                <input type="text" id="lastName" className="auth-input" placeholder="Doe" />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="auth-label" htmlFor="username">Username</label>
+              <input type="text" id="username" className="auth-input" placeholder="janedoe123" />
+            </div>
+            <div className="form-group">
+              <label className="auth-label" htmlFor="email">Email</label>
+              <input type="email" id="email" className="auth-input" placeholder="you@example.com" />
+            </div>
+            <div className="form-group">
+              <label className="auth-label" htmlFor="password">Password</label>
+              <input type="password" id="password" className="auth-input" placeholder="••••••••" />
+            </div>
+            <div className="form-group">
+              <label className="auth-label" htmlFor="repeatPassword">Repeat Password</label>
+              <input type="password" id="repeatPassword" className="auth-input" placeholder="••••••••" />
+            </div>
+            <button type="submit" className="primary-button auth-submit">Register</button>
+          </form>
+          <div className="auth-link">
+            Already have an account? <Link to="/login">Log in here</Link>
+          </div>
+        </div>
+        <div className="auth-visual-section">
+          <RegisterGraphic />
+          <p className="auth-visual-text">Connect with your clients effortlessly. Let them book your time without the hassle.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Home() {
   return (
     <div className="home-page">
@@ -226,6 +333,8 @@ function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
           </Routes>
         </main>
         <Footer />
