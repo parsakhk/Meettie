@@ -247,10 +247,10 @@ function Login({ setUser }) {
         setUser(data.user);
         navigate('/profile');
       } else {
-        setError(data.message || 'Login failed');
+        setError(data.error ? `${data.message}: ${data.error}` : (data.message || 'Login failed'));
       }
     } catch (err) {
-      setError('An error occurred during login');
+      setError(`An error occurred: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -332,10 +332,10 @@ function Register() {
         setSuccess('Account created! Please check your email to verify your account.');
         setFormData({ firstName: '', lastName: '', username: '', email: '', password: '', repeatPassword: '' });
       } else {
-        setError(data.message || 'Registration failed');
+        setError(data.error ? `${data.message}: ${data.error}` : (data.message || 'Registration failed'));
       }
     } catch (err) {
-      setError('An error occurred during registration');
+      setError(`An error occurred: ${err.message}`);
     } finally {
       setLoading(false);
     }

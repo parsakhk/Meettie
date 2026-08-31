@@ -28,6 +28,7 @@ export default async function handler(req, res) {
       }
     });
   } catch (error) {
-    return res.status(401).json({ message: 'Invalid token' });
+    console.error('API Error in me.js:', error);
+    return res.status(500).json({ message: 'Internal server error', error: error.message, stack: error.stack });
   }
 }

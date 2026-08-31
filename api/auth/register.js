@@ -54,7 +54,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ message: 'User created. Please verify your email.' });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Internal server error' });
+    console.error('API Error in register.js:', error);
+    return res.status(500).json({ message: 'Internal server error', error: error.message, stack: error.stack });
   }
 }
