@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import './App.css';
+import { supabase } from './lib/supabase.js';
 
 // Import feature images
 import imgBusinessCalendar from './assets/features/business_calendar.jpg';
@@ -222,7 +223,7 @@ function RegisterGraphic() {
   );
 }
 
-function Login({ setUser }) {
+function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -235,19 +236,15 @@ function Login({ setUser }) {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
       
-      const data = await res.json();
-      
-      if (res.ok) {
-        setUser(data.user);
-        navigate('/profile');
+      if (error) {
+        setError(error.message);
       } else {
-        setError(data.error ? `${data.message}: ${data.error}` : (data.message || 'Login failed'));
+        navigate('/profile');
       }
     } catch (err) {
       setError(`An error occurred: ${err.message}`);
@@ -320,19 +317,23 @@ function Register() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+      const { error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            username: formData.username,
+          }
+        }
       });
       
-      const data = await res.json();
-      
-      if (res.ok) {
+      if (error) {
+        setError(error.message);
+      } else {
         setSuccess('Account created! Please check your email to verify your account.');
         setFormData({ firstName: '', lastName: '', username: '', email: '', password: '', repeatPassword: '' });
-      } else {
-        setError(data.error ? `${data.message}: ${data.error}` : (data.message || 'Registration failed'));
       }
     } catch (err) {
       setError(`An error occurred: ${err.message}`);
@@ -407,47 +408,25 @@ function Home() {
 
 function Profile({ user }) {
   if (!user) return <div style={{ padding: '6rem 2rem', textAlign: 'center' }}>Please log in to view this page.</div>;
+  
+  const firstName = user.user_metadata?.first_name || 'User';
+  
   return (
     <div style={{ padding: '6rem 2rem', textAlign: 'center', minHeight: 'calc(100vh - 160px)' }}>
-      <h1 className="hero-title">Hi {user.firstName}!</h1>
+      <h1 className="hero-title">Hi {firstName}!</h1>
       <p className="hero-subtitle">Welcome to your Meettie dashboard.</p>
     </div>
   );
 }
 
 function Verify() {
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
-  const [status, setStatus] = useState('Verifying...');
-
-  useEffect(() => {
-    if (token) {
-      fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
-      })
-      .then(res => res.json().then(data => ({ status: res.status, data })))
-      .then(({ status, data }) => {
-        if (status === 200) {
-          setStatus('Email verified successfully! You can now log in.');
-        } else {
-          setStatus(data.message || 'Verification failed.');
-        }
-      })
-      .catch(() => setStatus('An error occurred during verification.'));
-    } else {
-      setStatus('No token provided.');
-    }
-  }, [token]);
-
+  // With Supabase, email verification is typically handled by clicking a link which redirects to the app.
+  // The session is established automatically if configured correctly.
   return (
     <div style={{ padding: '6rem 2rem', textAlign: 'center', minHeight: 'calc(100vh - 160px)' }}>
       <h1 className="hero-title">Email Verification</h1>
-      <p className="hero-subtitle">{status}</p>
-      {status.includes('successfully') && (
-        <Link to="/login" className="primary-button" style={{ display: 'inline-block', marginTop: '1rem' }}>Go to Login</Link>
-      )}
+      <p className="hero-subtitle">If you clicked a verification link, you should be logged in automatically.</p>
+      <Link to="/login" className="primary-button" style={{ display: 'inline-block', marginTop: '1rem' }}>Go to Login</Link>
     </div>
   );
 }
@@ -466,13 +445,17 @@ function App() {
       document.documentElement.setAttribute('data-theme', 'dark');
     }
 
-    fetch('/api/auth/me')
-      .then(res => {
-        if (res.ok) return res.json();
-        throw new Error('Not logged in');
-      })
-      .then(data => setUser(data.user))
-      .catch(() => setUser(null));
+    // Check active session and sets the user
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+
+    // Listen for changes on auth state (logged in, signed out, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
   }, []);
 
   const toggleTheme = () => {
@@ -483,8 +466,7 @@ function App() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    setUser(null);
+    await supabase.auth.signOut();
   };
 
   return (
@@ -494,7 +476,7 @@ function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login setUser={setUser} />} />
+            <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/verify" element={<Verify />} />
             <Route path="/profile" element={<Profile user={user} />} />
