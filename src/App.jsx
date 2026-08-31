@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import './App.css';
 
 // Import feature images
@@ -42,7 +42,7 @@ function CalendarGraphic() {
   );
 }
 
-function Navbar({ theme, toggleTheme }) {
+function Navbar({ theme, toggleTheme, user, onLogout }) {
   return (
     <nav className="navbar">
       <div className="nav-container">
@@ -76,7 +76,14 @@ function Navbar({ theme, toggleTheme }) {
               </svg>
             )}
           </button>
-          <Link to="/login" className="login-button">Login</Link>
+          {user ? (
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+              <Link to="/profile" className="login-button">Profile</Link>
+              <button onClick={onLogout} className="login-button" style={{ border: 'none' }}>Logout</button>
+            </div>
+          ) : (
+            <Link to="/login" className="login-button">Login</Link>
+          )}
         </div>
       </div>
     </nav>
@@ -193,9 +200,9 @@ function LoginGraphic() {
     <div className="auth-graphic">
       <svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M20 200H220" stroke="var(--primary)" strokeWidth="6" strokeLinecap="round"/>
-        <rect x="60" y="40" width="120" height="160" rx="8" stroke="var(--border)" strokeWidth="6"/>
-        <path d="M60 40 L140 20 V180 L60 200 Z" fill="var(--bg)" stroke="var(--border)" strokeWidth="6" strokeLinejoin="round"/>
-        <circle cx="125" cy="110" r="4" fill="var(--border)"/>
+        <rect x="60" y="40" width="120" height="160" rx="8" stroke="var(--text)" strokeWidth="6"/>
+        <path d="M60 40 L140 20 V180 L60 200 Z" fill="var(--bg)" stroke="var(--text)" strokeWidth="6" strokeLinejoin="round"/>
+        <circle cx="125" cy="110" r="4" fill="var(--text)"/>
         <path d="M150 120 H210 M170 100 L150 120 L170 140" stroke="var(--primary)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     </div>
@@ -206,8 +213,8 @@ function RegisterGraphic() {
   return (
     <div className="auth-graphic">
       <svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="120" cy="80" r="40" stroke="var(--border)" strokeWidth="6"/>
-        <path d="M50 200 C50 150, 80 140, 120 140 C160 140, 190 150, 190 200" stroke="var(--border)" strokeWidth="6" strokeLinecap="round"/>
+        <circle cx="120" cy="80" r="40" stroke="var(--text)" strokeWidth="6"/>
+        <path d="M50 200 C50 150, 80 140, 120 140 C160 140, 190 150, 190 200" stroke="var(--text)" strokeWidth="6" strokeLinecap="round"/>
         <circle cx="180" cy="140" r="24" fill="var(--bg)" stroke="var(--primary)" strokeWidth="6"/>
         <path d="M180 125 V155 M165 140 H195" stroke="var(--primary)" strokeWidth="6" strokeLinecap="round"/>
       </svg>
@@ -215,23 +222,61 @@ function RegisterGraphic() {
   );
 }
 
-function Login() {
+function Login({ setUser }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setUser(data.user);
+        navigate('/profile');
+      } else {
+        setError(data.message || 'Login failed');
+      }
+    } catch (err) {
+      setError('An error occurred during login');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="auth-page">
       <div className="auth-container">
         <div className="auth-form-section">
           <h1 className="auth-title">Welcome back</h1>
           <p className="auth-subtitle">Log in to manage your schedule and meetings.</p>
-          <form className="auth-form" onSubmit={(e) => e.preventDefault()}>
+          
+          {error && <div style={{ color: 'red', marginBottom: '1rem', fontSize: '0.875rem' }}>{error}</div>}
+          
+          <form className="auth-form" onSubmit={handleLogin}>
             <div className="form-group">
               <label className="auth-label" htmlFor="email">Email</label>
-              <input type="email" id="email" className="auth-input" placeholder="you@example.com" />
+              <input type="email" id="email" className="auth-input" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
             <div className="form-group">
               <label className="auth-label" htmlFor="password">Password</label>
-              <input type="password" id="password" className="auth-input" placeholder="••••••••" />
+              <input type="password" id="password" className="auth-input" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
-            <button type="submit" className="primary-button auth-submit">Log In</button>
+            <button type="submit" className="primary-button auth-submit" disabled={loading}>
+              {loading ? 'Logging in...' : 'Log In'}
+            </button>
           </form>
           <div className="auth-link">
             Don't have an account? <Link to="/register">Register here</Link>
@@ -247,40 +292,95 @@ function Login() {
 }
 
 function Register() {
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    username: '',
+    email: '',
+    password: '',
+    repeatPassword: ''
+  });
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.id]: e.target.value });
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (formData.password !== formData.repeatPassword) {
+      return setError('Passwords do not match');
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setSuccess('Account created! Please check your email to verify your account.');
+        setFormData({ firstName: '', lastName: '', username: '', email: '', password: '', repeatPassword: '' });
+      } else {
+        setError(data.message || 'Registration failed');
+      }
+    } catch (err) {
+      setError('An error occurred during registration');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="auth-page">
       <div className="auth-container">
         <div className="auth-form-section">
           <h1 className="auth-title">Create an account</h1>
           <p className="auth-subtitle">Join Meettie to simplify your bookings.</p>
-          <form className="auth-form" onSubmit={(e) => e.preventDefault()}>
+          
+          {error && <div style={{ color: 'red', marginBottom: '1rem', fontSize: '0.875rem' }}>{error}</div>}
+          {success && <div style={{ color: 'green', marginBottom: '1rem', fontSize: '0.875rem' }}>{success}</div>}
+          
+          <form className="auth-form" onSubmit={handleRegister}>
             <div className="form-row">
               <div className="form-group">
                 <label className="auth-label" htmlFor="firstName">Name</label>
-                <input type="text" id="firstName" className="auth-input" placeholder="Jane" />
+                <input type="text" id="firstName" className="auth-input" placeholder="Jane" value={formData.firstName} onChange={handleChange} required />
               </div>
               <div className="form-group">
                 <label className="auth-label" htmlFor="lastName">Last Name</label>
-                <input type="text" id="lastName" className="auth-input" placeholder="Doe" />
+                <input type="text" id="lastName" className="auth-input" placeholder="Doe" value={formData.lastName} onChange={handleChange} required />
               </div>
             </div>
             <div className="form-group">
               <label className="auth-label" htmlFor="username">Username</label>
-              <input type="text" id="username" className="auth-input" placeholder="janedoe123" />
+              <input type="text" id="username" className="auth-input" placeholder="janedoe123" value={formData.username} onChange={handleChange} required />
             </div>
             <div className="form-group">
               <label className="auth-label" htmlFor="email">Email</label>
-              <input type="email" id="email" className="auth-input" placeholder="you@example.com" />
+              <input type="email" id="email" className="auth-input" placeholder="you@example.com" value={formData.email} onChange={handleChange} required />
             </div>
             <div className="form-group">
               <label className="auth-label" htmlFor="password">Password</label>
-              <input type="password" id="password" className="auth-input" placeholder="••••••••" />
+              <input type="password" id="password" className="auth-input" placeholder="••••••••" value={formData.password} onChange={handleChange} required />
             </div>
             <div className="form-group">
               <label className="auth-label" htmlFor="repeatPassword">Repeat Password</label>
-              <input type="password" id="repeatPassword" className="auth-input" placeholder="••••••••" />
+              <input type="password" id="repeatPassword" className="auth-input" placeholder="••••••••" value={formData.repeatPassword} onChange={handleChange} required />
             </div>
-            <button type="submit" className="primary-button auth-submit">Register</button>
+            <button type="submit" className="primary-button auth-submit" disabled={loading}>
+              {loading ? 'Creating account...' : 'Register'}
+            </button>
           </form>
           <div className="auth-link">
             Already have an account? <Link to="/login">Log in here</Link>
@@ -305,8 +405,56 @@ function Home() {
   );
 }
 
+function Profile({ user }) {
+  if (!user) return <div style={{ padding: '6rem 2rem', textAlign: 'center' }}>Please log in to view this page.</div>;
+  return (
+    <div style={{ padding: '6rem 2rem', textAlign: 'center', minHeight: 'calc(100vh - 160px)' }}>
+      <h1 className="hero-title">Hi {user.firstName}!</h1>
+      <p className="hero-subtitle">Welcome to your Meettie dashboard.</p>
+    </div>
+  );
+}
+
+function Verify() {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+  const [status, setStatus] = useState('Verifying...');
+
+  useEffect(() => {
+    if (token) {
+      fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      })
+      .then(res => res.json().then(data => ({ status: res.status, data })))
+      .then(({ status, data }) => {
+        if (status === 200) {
+          setStatus('Email verified successfully! You can now log in.');
+        } else {
+          setStatus(data.message || 'Verification failed.');
+        }
+      })
+      .catch(() => setStatus('An error occurred during verification.'));
+    } else {
+      setStatus('No token provided.');
+    }
+  }, [token]);
+
+  return (
+    <div style={{ padding: '6rem 2rem', textAlign: 'center', minHeight: 'calc(100vh - 160px)' }}>
+      <h1 className="hero-title">Email Verification</h1>
+      <p className="hero-subtitle">{status}</p>
+      {status.includes('successfully') && (
+        <Link to="/login" className="primary-button" style={{ display: 'inline-block', marginTop: '1rem' }}>Go to Login</Link>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [theme, setTheme] = useState('light');
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('meettie-theme');
@@ -317,6 +465,14 @@ function App() {
       setTheme('dark');
       document.documentElement.setAttribute('data-theme', 'dark');
     }
+
+    fetch('/api/auth/me')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Not logged in');
+      })
+      .then(data => setUser(data.user))
+      .catch(() => setUser(null));
   }, []);
 
   const toggleTheme = () => {
@@ -326,15 +482,22 @@ function App() {
     localStorage.setItem('meettie-theme', newTheme);
   };
 
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setUser(null);
+  };
+
   return (
     <BrowserRouter>
       <div className="app-container">
-        <Navbar theme={theme} toggleTheme={toggleTheme} />
+        <Navbar theme={theme} toggleTheme={toggleTheme} user={user} onLogout={handleLogout} />
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
+            <Route path="/login" element={<Login setUser={setUser} />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/verify" element={<Verify />} />
+            <Route path="/profile" element={<Profile user={user} />} />
           </Routes>
         </main>
         <Footer />
