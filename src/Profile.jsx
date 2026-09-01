@@ -45,22 +45,26 @@ function Profile({ user }) {
       // Fetch Profile by username
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('*, auth_users:id(raw_user_meta_data, created_at)')
+        .select('*')
         .eq('username', username)
         .single();
 
       if (profileError || !profile) {
+        console.error("Profile fetch error:", profileError);
         setLoading(false);
         return; // Handle not found gracefully in render
       }
 
       setProfileId(profile.id);
 
-      // We might not have access to auth.users if RLS blocks it for public.
-      // If auth_users fails, we just show what we have in profile.
-      const creationDate = profile.updated_at ? new Date(profile.updated_at).toLocaleDateString() : '';
-      
-      // We will rely on profiles table, but fallback to logged in user if it's the owner
+      // We rely on the profiles table. If we want creation date for viewers, we should add it to profiles DB.
+      // For now, if it's the owner, we have it in the session user object.
+      let creationDate = '';
+      if (isOwner && user?.created_at) {
+        creationDate = new Date(user.created_at).toLocaleDateString();
+      }
+
+      // We rely on profiles table, but fallback to logged in user if it's the owner
       let fullName = '';
       if (isOwner && user) {
         fullName = user.user_metadata?.first_name ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`.trim() : '';
