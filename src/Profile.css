@@ -28,11 +28,13 @@
 .profile-picture-container {
   position: relative;
   margin-bottom: 2rem;
+  width: 120px;
+  height: 120px;
 }
 
 .profile-picture {
-  width: 120px;
-  height: 120px;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   background: var(--hover-bg);
   border: 2px solid var(--primary);
@@ -72,6 +74,27 @@
   font-weight: bold;
   cursor: pointer;
   transition: transform 0.2s;
+  z-index: 10;
+}
+
+.placeholder-text {
+  color: var(--text-muted);
+  font-style: italic;
+  font-weight: normal;
+  font-size: 0.9em;
+}
+
+.private-badge {
+  font-size: 0.75rem;
+  background: var(--border);
+  color: var(--text);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  margin-left: 0.75rem;
+  vertical-align: middle;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.05em;
 }
 
 .upload-picture-btn:hover {
