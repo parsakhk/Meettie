@@ -449,15 +449,8 @@ function Profile({ user }) {
         <div className="businesses-grid">
           {businesses.map((business) => (
             <div key={business.id} className="business-card">
-              {isOwner && (
-                <div className="calendar-actions">
-                  <button className="calendar-action-btn" onClick={() => openEditCalendar(business)}>✎</button>
-                  <button className="calendar-action-btn delete-btn" onClick={() => deleteCalendar(business.id)}>✕</button>
-                </div>
-              )}
-              
-              <div className="business-card-info">
-                <h3>
+              <div className="business-card-info" style={{ marginBottom: '1rem' }}>
+                <h3 style={{ paddingRight: 0 }}>
                   {business.name}
                   {business.is_private && <span className="private-badge">Private</span>}
                 </h3>
@@ -473,7 +466,24 @@ function Profile({ user }) {
                 <p>{business.description}</p>
               </div>
 
-              <div className="calendar-footer">
+              <div className="calendar-buttons-column" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                <Link to={`/calendar/${business.slug}`} className="primary-button visit-business-btn" style={{ marginTop: 0 }}>
+                  Go to Page
+                </Link>
+                
+                {isOwner && (
+                  <>
+                    <button className="login-button visit-business-btn" style={{ marginTop: 0 }} onClick={() => openEditCalendar(business)}>
+                      Edit Calendar
+                    </button>
+                    <button className="login-button visit-business-btn" style={{ marginTop: 0, borderColor: '#ef4444', color: '#ef4444' }} onClick={() => deleteCalendar(business.id)}>
+                      Delete Calendar
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="calendar-footer" style={{ marginTop: 'auto' }}>
                 <div className="avatar-stack">
                   {business.ownerAvatar ? (
                     <img src={business.ownerAvatar} alt="Owner" className="avatar-mini" />
@@ -497,10 +507,6 @@ function Profile({ user }) {
                   <span>{business.likesCount}</span>
                 </div>
               </div>
-
-              <Link to={`/calendar/${business.slug}`} className="login-button visit-business-btn">
-                Go to Page
-              </Link>
             </div>
           ))}
           {businesses.length === 0 && (

@@ -403,12 +403,14 @@
 
 .modal-content {
   background: var(--bg);
-  padding: 2.5rem;
-  border-radius: 16px;
+  padding: 2rem;
+  border-radius: 12px;
   width: 90%;
   max-width: 500px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  max-height: 90vh;
+  overflow-y: auto;
   border: 1px solid var(--border);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
 }
 
 .modal-content h3 {
