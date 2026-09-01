@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { supabase } from './lib/supabase';
 import './Profile.css';
 
 function Profile({ user, isOwner = true }) {
+  const [loading, setLoading] = useState(true);
   const [profileData, setProfileData] = useState({
     profilePicture: '',
-    fullName: user?.user_metadata?.first_name ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`.trim() : '',
+    fullName: '',
     bio: '',
     currentlyWorkingIn: '',
-    accountCreationDate: user?.created_at ? new Date(user.created_at).toLocaleDateString() : new Date().toLocaleDateString(),
+    accountCreationDate: '',
     tags: []
   });
 
@@ -27,16 +29,79 @@ function Profile({ user, isOwner = true }) {
     allowedUsernames: ''
   });
 
+  useEffect(() => {
+    if (user) {
+      fetchProfileAndCalendars();
+    }
+  }, [user]);
+
+  const fetchProfileAndCalendars = async () => {
+    try {
+      setLoading(true);
+      // Fetch Profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      // If user doesn't have a profile yet (SQL trigger didn't run), we'll handle gracefully.
+      
+      const creationDate = user.created_at ? new Date(user.created_at).toLocaleDateString() : new Date().toLocaleDateString();
+      const fullName = user.user_metadata?.first_name ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`.trim() : '';
+
+      setProfileData({
+        profilePicture: profile?.avatar_url || '',
+        fullName: fullName,
+        bio: profile?.bio || '',
+        currentlyWorkingIn: profile?.currently_working_in || '',
+        accountCreationDate: creationDate,
+        tags: profile?.tags || []
+      });
+
+      // Fetch Calendars
+      const { data: cals } = await supabase
+        .from('calendars')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (cals) {
+        setBusinesses(cals);
+      }
+
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEditClick = () => {
     if (!isOwner) return;
     setEditData({ ...profileData });
     setIsModalOpen(true);
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    setProfileData(editData);
-    setIsModalOpen(false);
+    try {
+      // Upsert profile data
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id,
+          bio: editData.bio,
+          currently_working_in: editData.currentlyWorkingIn,
+          tags: editData.tags
+        });
+
+      if (error) throw error;
+      setProfileData(editData);
+      setIsModalOpen(false);
+    } catch (err) {
+      alert('Error updating profile: ' + err.message);
+    }
   };
 
   const handleChange = (e) => {
@@ -49,30 +114,86 @@ function Profile({ user, isOwner = true }) {
     setEditData((prev) => ({ ...prev, tags: value.split(',').map(tag => tag.trim()).filter(Boolean) }));
   };
 
-  const handleProfilePicUpload = (e) => {
+  const handleProfilePicUpload = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setProfileData(prev => ({ ...prev, profilePicture: imageUrl }));
+    if (!file) return;
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // Upload to Storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const publicURL = data.publicUrl;
+
+      // Save URL to profile
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id,
+          avatar_url: publicURL
+        });
+        
+      if (updateError) throw updateError;
+
+      setProfileData(prev => ({ ...prev, profilePicture: publicURL }));
+
+    } catch (err) {
+      alert('Error uploading image: ' + err.message);
     }
   };
 
-  const handleCreateCalendarSave = (e) => {
+  const handleCreateCalendarSave = async (e) => {
     e.preventDefault();
-    const newBiz = {
-      id: Date.now(),
-      name: newCalendar.name,
-      description: newCalendar.description,
-      slug: newCalendar.name.toLowerCase().replace(/\s+/g, '-'),
-      isPrivate: newCalendar.isPrivate,
-      allowedUsernames: newCalendar.isPrivate ? newCalendar.allowedUsernames.split(',').map(u => u.trim()).filter(Boolean) : []
-    };
-    setBusinesses([...businesses, newBiz]);
-    setIsCreateModalOpen(false);
-    setNewCalendar({ name: '', description: '', isPrivate: false, allowedUsernames: '' });
+    try {
+      const slug = newCalendar.name.toLowerCase().replace(/\s+/g, '-');
+      
+      // Insert Calendar
+      const { data: newCal, error } = await supabase
+        .from('calendars')
+        .insert([{
+          user_id: user.id,
+          name: newCalendar.name,
+          description: newCalendar.description,
+          slug: slug,
+          is_private: newCalendar.isPrivate
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Insert Allowed Usernames if private
+      if (newCalendar.isPrivate && newCalendar.allowedUsernames) {
+        const usernames = newCalendar.allowedUsernames.split(',').map(u => u.trim()).filter(Boolean);
+        if (usernames.length > 0) {
+          const accessRows = usernames.map(un => ({
+            calendar_id: newCal.id,
+            username: un
+          }));
+          await supabase.from('calendar_access').insert(accessRows);
+        }
+      }
+
+      setBusinesses([newCal, ...businesses]);
+      setIsCreateModalOpen(false);
+      setNewCalendar({ name: '', description: '', isPrivate: false, allowedUsernames: '' });
+
+    } catch (err) {
+      alert('Error creating calendar: ' + err.message);
+    }
   };
 
   if (!user && isOwner) return <div style={{ padding: '6rem 2rem', textAlign: 'center' }}>Please log in to view this page.</div>;
+  if (loading) return <div style={{ padding: '6rem 2rem', textAlign: 'center' }}>Loading profile...</div>;
 
   return (
     <div className="profile-page-container">
@@ -151,7 +272,7 @@ function Profile({ user, isOwner = true }) {
 
           <div className="profile-field">
             <div className="profile-tags">
-              {profileData.tags.length > 0 ? profileData.tags.map((tag, idx) => (
+              {profileData.tags && profileData.tags.length > 0 ? profileData.tags.map((tag, idx) => (
                 <span key={idx} className="profile-tag">{tag}</span>
               )) : <span className="placeholder-text">No tags</span>}
             </div>
@@ -184,7 +305,7 @@ function Profile({ user, isOwner = true }) {
               <div className="business-card-info">
                 <h3>
                   {business.name}
-                  {business.isPrivate && <span className="private-badge">Private</span>}
+                  {business.is_private && <span className="private-badge">Private</span>}
                 </h3>
                 <p>{business.description}</p>
               </div>
@@ -208,13 +329,13 @@ function Profile({ user, isOwner = true }) {
             <h3>Edit Profile</h3>
             <form onSubmit={handleSave}>
               <div className="form-group">
-                <label>Full Name</label>
+                <label>Full Name (Change in settings)</label>
                 <input 
                   type="text" 
-                  name="fullName" 
                   value={editData.fullName} 
-                  onChange={handleChange} 
+                  disabled
                   className="auth-input" 
+                  style={{ opacity: 0.7, cursor: 'not-allowed' }}
                 />
               </div>
               <div className="form-group">
