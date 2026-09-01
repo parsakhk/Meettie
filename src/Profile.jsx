@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import './Profile.css';
 
-function Profile({ user, isOwner = true }) {
+function Profile({ user }) {
+  const { username } = useParams();
+  const isOwner = user?.user_metadata?.username === username;
+  
   const [loading, setLoading] = useState(true);
+  const [profileId, setProfileId] = useState(null);
   const [profileData, setProfileData] = useState({
     profilePicture: '',
     fullName: '',
@@ -30,40 +34,52 @@ function Profile({ user, isOwner = true }) {
   });
 
   useEffect(() => {
-    if (user) {
+    if (username) {
       fetchProfileAndCalendars();
     }
-  }, [user]);
+  }, [username, user]);
 
   const fetchProfileAndCalendars = async () => {
     try {
       setLoading(true);
-      // Fetch Profile
+      // Fetch Profile by username
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('*')
-        .eq('id', user.id)
+        .select('*, auth_users:id(raw_user_meta_data, created_at)')
+        .eq('username', username)
         .single();
 
-      // If user doesn't have a profile yet (SQL trigger didn't run), we'll handle gracefully.
+      if (profileError || !profile) {
+        setLoading(false);
+        return; // Handle not found gracefully in render
+      }
+
+      setProfileId(profile.id);
+
+      // We might not have access to auth.users if RLS blocks it for public.
+      // If auth_users fails, we just show what we have in profile.
+      const creationDate = profile.updated_at ? new Date(profile.updated_at).toLocaleDateString() : '';
       
-      const creationDate = user.created_at ? new Date(user.created_at).toLocaleDateString() : new Date().toLocaleDateString();
-      const fullName = user.user_metadata?.first_name ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`.trim() : '';
+      // We will rely on profiles table, but fallback to logged in user if it's the owner
+      let fullName = '';
+      if (isOwner && user) {
+        fullName = user.user_metadata?.first_name ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`.trim() : '';
+      }
 
       setProfileData({
-        profilePicture: profile?.avatar_url || '',
+        profilePicture: profile.avatar_url || '',
         fullName: fullName,
-        bio: profile?.bio || '',
-        currentlyWorkingIn: profile?.currently_working_in || '',
+        bio: profile.bio || '',
+        currentlyWorkingIn: profile.currently_working_in || '',
         accountCreationDate: creationDate,
-        tags: profile?.tags || []
+        tags: profile.tags || []
       });
 
       // Fetch Calendars
       const { data: cals } = await supabase
         .from('calendars')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', profile.id)
         .order('created_at', { ascending: false });
 
       if (cals) {
@@ -86,11 +102,11 @@ function Profile({ user, isOwner = true }) {
   const handleSave = async (e) => {
     e.preventDefault();
     try {
-      // Upsert profile data
       const { error } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
+          username: username,
           bio: editData.bio,
           currently_working_in: editData.currentlyWorkingIn,
           tags: editData.tags
@@ -111,7 +127,9 @@ function Profile({ user, isOwner = true }) {
 
   const handleTagsChange = (e) => {
     const value = e.target.value;
-    setEditData((prev) => ({ ...prev, tags: value.split(',').map(tag => tag.trim()).filter(Boolean) }));
+    // Strip # if they typed it, to keep it clean in DB
+    const cleanedTags = value.split(',').map(tag => tag.trim().replace(/^#/, '')).filter(Boolean);
+    setEditData((prev) => ({ ...prev, tags: cleanedTags }));
   };
 
   const handleProfilePicUpload = async (e) => {
@@ -123,22 +141,20 @@ function Profile({ user, isOwner = true }) {
       const fileName = `${user.id}-${Math.random()}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // Upload to Storage
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
       const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
       const publicURL = data.publicUrl;
 
-      // Save URL to profile
       const { error: updateError } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
+          username: username,
           avatar_url: publicURL
         });
         
@@ -153,10 +169,23 @@ function Profile({ user, isOwner = true }) {
 
   const handleCreateCalendarSave = async (e) => {
     e.preventDefault();
+
+    let allowedUsers = [];
+    if (newCalendar.isPrivate && newCalendar.allowedUsernames) {
+      const users = newCalendar.allowedUsernames.split(',').map(u => u.trim()).filter(Boolean);
+      // Validate they start with @
+      const invalidUsers = users.filter(u => !u.startsWith('@'));
+      if (invalidUsers.length > 0) {
+        alert("All allowed usernames must start with '@' (e.g., @johndoe).");
+        return;
+      }
+      // Remove @ for db storage if you want, or keep it. We'll keep it as typed.
+      allowedUsers = users;
+    }
+
     try {
       const slug = newCalendar.name.toLowerCase().replace(/\s+/g, '-');
       
-      // Insert Calendar
       const { data: newCal, error } = await supabase
         .from('calendars')
         .insert([{
@@ -171,16 +200,12 @@ function Profile({ user, isOwner = true }) {
 
       if (error) throw error;
 
-      // Insert Allowed Usernames if private
-      if (newCalendar.isPrivate && newCalendar.allowedUsernames) {
-        const usernames = newCalendar.allowedUsernames.split(',').map(u => u.trim()).filter(Boolean);
-        if (usernames.length > 0) {
-          const accessRows = usernames.map(un => ({
-            calendar_id: newCal.id,
-            username: un
-          }));
-          await supabase.from('calendar_access').insert(accessRows);
-        }
+      if (newCalendar.isPrivate && allowedUsers.length > 0) {
+        const accessRows = allowedUsers.map(un => ({
+          calendar_id: newCal.id,
+          username: un // stores with @
+        }));
+        await supabase.from('calendar_access').insert(accessRows);
       }
 
       setBusinesses([newCal, ...businesses]);
@@ -192,8 +217,8 @@ function Profile({ user, isOwner = true }) {
     }
   };
 
-  if (!user && isOwner) return <div style={{ padding: '6rem 2rem', textAlign: 'center' }}>Please log in to view this page.</div>;
   if (loading) return <div style={{ padding: '6rem 2rem', textAlign: 'center' }}>Loading profile...</div>;
+  if (!profileId) return <div style={{ padding: '6rem 2rem', textAlign: 'center' }}>Profile not found.</div>;
 
   return (
     <div className="profile-page-container">
@@ -206,7 +231,7 @@ function Profile({ user, isOwner = true }) {
               <img src={profileData.profilePicture} alt="Profile" />
             ) : (
               <div className="profile-picture-placeholder">
-                {profileData.fullName ? profileData.fullName.charAt(0).toUpperCase() : 'U'}
+                {profileData.fullName ? profileData.fullName.charAt(0).toUpperCase() : username.charAt(0).toUpperCase()}
               </div>
             )}
           </div>
@@ -228,6 +253,11 @@ function Profile({ user, isOwner = true }) {
               />
             </>
           )}
+        </div>
+        
+        {/* Username behind/below pfp */}
+        <div className="profile-username" style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', marginTop: '-1rem', fontWeight: 500 }}>
+          @{username}
         </div>
 
         {/* User Info Fields */}
@@ -266,14 +296,16 @@ function Profile({ user, isOwner = true }) {
             )}
           </div>
 
-          <div className="profile-field-static">
-            <p className="profile-date"><strong>Joined:</strong> {profileData.accountCreationDate}</p>
-          </div>
+          {profileData.accountCreationDate && (
+            <div className="profile-field-static">
+              <p className="profile-date"><strong>Joined:</strong> {profileData.accountCreationDate}</p>
+            </div>
+          )}
 
           <div className="profile-field">
             <div className="profile-tags">
               {profileData.tags && profileData.tags.length > 0 ? profileData.tags.map((tag, idx) => (
-                <span key={idx} className="profile-tag">{tag}</span>
+                <span key={idx} className="profile-tag">#{tag}</span>
               )) : <span className="placeholder-text">No tags</span>}
             </div>
             {isOwner && (
@@ -359,7 +391,7 @@ function Profile({ user, isOwner = true }) {
                 />
               </div>
               <div className="form-group">
-                <label>Tags (comma separated)</label>
+                <label>Tags (comma separated, no # needed)</label>
                 <input 
                   type="text" 
                   name="tags" 
@@ -418,12 +450,12 @@ function Profile({ user, isOwner = true }) {
                   <label>Allowed Usernames (comma separated)</label>
                   <input 
                     type="text" 
-                    placeholder="e.g. johndoe, janedoe"
+                    placeholder="e.g. @johndoe, @janedoe"
                     value={newCalendar.allowedUsernames} 
                     onChange={(e) => setNewCalendar({...newCalendar, allowedUsernames: e.target.value})} 
                     className="auth-input" 
                   />
-                  <small style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>Only these users will be able to access this calendar.</small>
+                  <small style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>Only these users will be able to access this calendar. Must start with '@'.</small>
                 </div>
               )}
 

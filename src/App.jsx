@@ -80,7 +80,7 @@ function Navbar({ theme, toggleTheme, user, onLogout }) {
           </button>
           {user ? (
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-              <Link to="/profile" className="login-button">Profile</Link>
+              <Link to={`/profile/${user.user_metadata?.username}`} className="login-button">Profile</Link>
               <button onClick={onLogout} className="login-button" style={{ border: 'none' }}>Logout</button>
             </div>
           ) : (
@@ -245,7 +245,12 @@ function Login() {
       if (error) {
         setError(error.message);
       } else {
-        navigate('/profile');
+        const username = data.user?.user_metadata?.username;
+        if (username) {
+          navigate(`/profile/${username}`);
+        } else {
+          navigate('/');
+        }
       }
     } catch (err) {
       setError(`An error occurred: ${err.message}`);
@@ -468,7 +473,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/verify" element={<Verify />} />
-            <Route path="/profile" element={<Profile user={user} />} />
+            <Route path="/profile/:username" element={<Profile user={user} />} />
           </Routes>
         </main>
         <Footer />
