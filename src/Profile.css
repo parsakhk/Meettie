@@ -242,6 +242,7 @@
   flex-direction: column;
   justify-content: space-between;
   transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
 }
 
 .business-card:hover {
@@ -249,10 +250,53 @@
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
 }
 
+.calendar-actions {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.calendar-action-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  font-size: 1.1rem;
+  transition: color 0.2s;
+  line-height: 1;
+}
+
+.calendar-action-btn:hover {
+  color: var(--primary);
+}
+
+.calendar-action-btn.delete-btn:hover {
+  color: #ef4444;
+}
+
 .business-card-info h3 {
   margin: 0 0 0.5rem 0;
   font-size: 1.25rem;
   color: var(--text);
+  padding-right: 3rem; /* Space for actions */
+}
+
+.calendar-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.calendar-tag {
+  font-size: 0.75rem;
+  color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.1);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
 }
 
 .business-card-info p {
@@ -262,10 +306,74 @@
   line-height: 1.5;
 }
 
+.calendar-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.avatar-stack {
+  display: flex;
+  align-items: center;
+}
+
+.avatar-mini {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--hover-bg);
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: bold;
+  color: var(--primary);
+  margin-left: -8px;
+  object-fit: cover;
+}
+
+.avatar-mini:first-child {
+  margin-left: 0;
+}
+
+.calendar-stars {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  font-size: 1.2rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.star-btn:hover {
+  color: #f59e0b;
+  transform: scale(1.1);
+}
+
+.star-btn.liked {
+  color: #f59e0b;
+}
+
 .visit-business-btn {
   text-align: center;
   text-decoration: none;
   display: block;
+  margin-top: 1rem;
 }
 
 .empty-businesses {

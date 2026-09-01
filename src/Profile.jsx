@@ -24,11 +24,15 @@ function Profile({ user }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editData, setEditData] = useState({ ...profileData });
 
-  // Create Calendar Modal
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newCalendar, setNewCalendar] = useState({
+  // Create/Edit Calendar Modal
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [isEditingCalendar, setIsEditingCalendar] = useState(false);
+  const [calendarForm, setCalendarForm] = useState({
+    id: null,
     name: '',
+    calendarId: '', // the slug
     description: '',
+    tags: '',
     isPrivate: false,
     allowedUsernames: ''
   });
@@ -50,21 +54,14 @@ function Profile({ user }) {
         .single();
 
       if (profileError || !profile) {
-        console.error("Profile fetch error:", profileError);
         setLoading(false);
-        return; // Handle not found gracefully in render
+        return;
       }
 
       setProfileId(profile.id);
 
-      // We rely on the profiles table. If we want creation date for viewers, we should add it to profiles DB.
-      // For now, if it's the owner, we have it in the session user object.
-      let creationDate = '';
-      if (isOwner && user?.created_at) {
-        creationDate = new Date(user.created_at).toLocaleDateString();
-      }
-
-      // We rely on profiles table, but fallback to logged in user if it's the owner
+      const creationDate = profile.updated_at ? new Date(profile.updated_at).toLocaleDateString() : '';
+      
       let fullName = '';
       if (isOwner && user) {
         fullName = user.user_metadata?.first_name ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`.trim() : '';
@@ -79,15 +76,22 @@ function Profile({ user }) {
         tags: profile.tags || []
       });
 
-      // Fetch Calendars
+      // Fetch Calendars and their likes
       const { data: cals } = await supabase
         .from('calendars')
-        .select('*')
+        .select('*, calendar_likes(*)')
         .eq('user_id', profile.id)
         .order('created_at', { ascending: false });
 
       if (cals) {
-        setBusinesses(cals);
+        // Map the likes array to just useful properties for the frontend
+        const enrichedCals = cals.map(cal => ({
+          ...cal,
+          likesCount: cal.calendar_likes ? cal.calendar_likes.length : 0,
+          hasLiked: user ? (cal.calendar_likes || []).some(like => like.user_id === user.id) : false,
+          ownerAvatar: profile.avatar_url || '' // For the avatar stack
+        }));
+        setBusinesses(enrichedCals);
       }
 
     } catch (error) {
@@ -97,6 +101,7 @@ function Profile({ user }) {
     }
   };
 
+  // Profile Actions
   const handleEditClick = () => {
     if (!isOwner) return;
     setEditData({ ...profileData });
@@ -131,7 +136,6 @@ function Profile({ user }) {
 
   const handleTagsChange = (e) => {
     const value = e.target.value;
-    // Strip # if they typed it, to keep it clean in DB
     const cleanedTags = value.split(',').map(tag => tag.trim().replace(/^#/, '')).filter(Boolean);
     setEditData((prev) => ({ ...prev, tags: cleanedTags }));
   };
@@ -171,53 +175,161 @@ function Profile({ user }) {
     }
   };
 
-  const handleCreateCalendarSave = async (e) => {
+  // Calendar Actions
+  const openCreateCalendar = () => {
+    setIsEditingCalendar(false);
+    setCalendarForm({ id: null, name: '', calendarId: '', description: '', tags: '', isPrivate: false, allowedUsernames: '' });
+    setIsCalendarModalOpen(true);
+  };
+
+  const openEditCalendar = async (cal) => {
+    // Fetch current access if private
+    let accessString = '';
+    if (cal.is_private) {
+      const { data: accessData } = await supabase
+        .from('calendar_access')
+        .select('username')
+        .eq('calendar_id', cal.id);
+      if (accessData) {
+        accessString = accessData.map(a => a.username).join(', ');
+      }
+    }
+
+    setCalendarForm({
+      id: cal.id,
+      name: cal.name,
+      calendarId: cal.slug,
+      description: cal.description,
+      tags: cal.tags ? cal.tags.join(', ') : '',
+      isPrivate: cal.is_private,
+      allowedUsernames: accessString
+    });
+    setIsEditingCalendar(true);
+    setIsCalendarModalOpen(true);
+  };
+
+  const deleteCalendar = async (calId) => {
+    if (!window.confirm("Are you sure you want to delete this calendar?")) return;
+    try {
+      const { error } = await supabase.from('calendars').delete().eq('id', calId);
+      if (error) throw error;
+      setBusinesses(prev => prev.filter(c => c.id !== calId));
+    } catch (err) {
+      alert("Error deleting calendar: " + err.message);
+    }
+  };
+
+  const toggleStar = async (cal) => {
+    if (!user) {
+      alert("You must be logged in to like a calendar.");
+      return;
+    }
+    if (isOwner) return; // Owner can't like their own
+
+    try {
+      if (cal.hasLiked) {
+        // Unlike
+        await supabase.from('calendar_likes').delete().eq('user_id', user.id).eq('calendar_id', cal.id);
+        setBusinesses(prev => prev.map(c => c.id === cal.id ? { ...c, hasLiked: false, likesCount: c.likesCount - 1 } : c));
+      } else {
+        // Like
+        await supabase.from('calendar_likes').insert({ user_id: user.id, calendar_id: cal.id });
+        setBusinesses(prev => prev.map(c => c.id === cal.id ? { ...c, hasLiked: true, likesCount: c.likesCount + 1 } : c));
+      }
+    } catch (err) {
+      console.error("Error toggling like:", err);
+    }
+  };
+
+  const handleCalendarSave = async (e) => {
     e.preventDefault();
 
     let allowedUsers = [];
-    if (newCalendar.isPrivate && newCalendar.allowedUsernames) {
-      const users = newCalendar.allowedUsernames.split(',').map(u => u.trim()).filter(Boolean);
-      // Validate they start with @
+    if (calendarForm.isPrivate && calendarForm.allowedUsernames) {
+      const users = calendarForm.allowedUsernames.split(',').map(u => u.trim()).filter(Boolean);
       const invalidUsers = users.filter(u => !u.startsWith('@'));
       if (invalidUsers.length > 0) {
         alert("All allowed usernames must start with '@' (e.g., @johndoe).");
         return;
       }
-      // Remove @ for db storage if you want, or keep it. We'll keep it as typed.
       allowedUsers = users;
     }
 
+    const cleanedTags = calendarForm.tags.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean);
+    const slug = calendarForm.calendarId.toLowerCase().replace(/\s+/g, '-');
+
     try {
-      const slug = newCalendar.name.toLowerCase().replace(/\s+/g, '-');
-      
-      const { data: newCal, error } = await supabase
-        .from('calendars')
-        .insert([{
-          user_id: user.id,
-          name: newCalendar.name,
-          description: newCalendar.description,
-          slug: slug,
-          is_private: newCalendar.isPrivate
-        }])
-        .select()
-        .single();
+      let savedCalId = null;
 
-      if (error) throw error;
+      if (isEditingCalendar) {
+        // Update
+        const { data, error } = await supabase
+          .from('calendars')
+          .update({
+            name: calendarForm.name,
+            description: calendarForm.description,
+            slug: slug,
+            tags: cleanedTags,
+            is_private: calendarForm.isPrivate
+          })
+          .eq('id', calendarForm.id)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        savedCalId = data.id;
 
-      if (newCalendar.isPrivate && allowedUsers.length > 0) {
+        // Re-sync access: delete old, insert new
+        await supabase.from('calendar_access').delete().eq('calendar_id', savedCalId);
+
+        setBusinesses(prev => prev.map(c => c.id === savedCalId ? { 
+          ...c, 
+          name: data.name, 
+          description: data.description, 
+          slug: data.slug, 
+          tags: data.tags, 
+          is_private: data.is_private 
+        } : c));
+
+      } else {
+        // Insert
+        const { data, error } = await supabase
+          .from('calendars')
+          .insert([{
+            user_id: user.id,
+            name: calendarForm.name,
+            description: calendarForm.description,
+            slug: slug,
+            tags: cleanedTags,
+            is_private: calendarForm.isPrivate
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+        savedCalId = data.id;
+
+        const newBiz = {
+          ...data,
+          likesCount: 0,
+          hasLiked: false,
+          ownerAvatar: profileData.profilePicture
+        };
+        setBusinesses([newBiz, ...businesses]);
+      }
+
+      // Handle Private Users (both for create and update)
+      if (calendarForm.isPrivate && allowedUsers.length > 0) {
         const accessRows = allowedUsers.map(un => ({
-          calendar_id: newCal.id,
-          username: un // stores with @
+          calendar_id: savedCalId,
+          username: un
         }));
         await supabase.from('calendar_access').insert(accessRows);
       }
 
-      setBusinesses([newCal, ...businesses]);
-      setIsCreateModalOpen(false);
-      setNewCalendar({ name: '', description: '', isPrivate: false, allowedUsernames: '' });
-
+      setIsCalendarModalOpen(false);
     } catch (err) {
-      alert('Error creating calendar: ' + err.message);
+      alert('Error saving calendar: ' + err.message);
     }
   };
 
@@ -259,7 +371,6 @@ function Profile({ user }) {
           )}
         </div>
         
-        {/* Username behind/below pfp */}
         <div className="profile-username" style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', marginTop: '-1rem', fontWeight: 500 }}>
           @{username}
         </div>
@@ -328,7 +439,7 @@ function Profile({ user }) {
           {isOwner && (
             <button 
               className="primary-button create-calendar-btn"
-              onClick={() => setIsCreateModalOpen(true)}
+              onClick={openCreateCalendar}
             >
               + Create Calendar
             </button>
@@ -338,13 +449,55 @@ function Profile({ user }) {
         <div className="businesses-grid">
           {businesses.map((business) => (
             <div key={business.id} className="business-card">
+              {isOwner && (
+                <div className="calendar-actions">
+                  <button className="calendar-action-btn" onClick={() => openEditCalendar(business)}>✎</button>
+                  <button className="calendar-action-btn delete-btn" onClick={() => deleteCalendar(business.id)}>✕</button>
+                </div>
+              )}
+              
               <div className="business-card-info">
                 <h3>
                   {business.name}
                   {business.is_private && <span className="private-badge">Private</span>}
                 </h3>
+                
+                {business.tags && business.tags.length > 0 && (
+                  <div className="calendar-tags">
+                    {business.tags.map((tag, idx) => (
+                      <span key={idx} className="calendar-tag">#{tag}</span>
+                    ))}
+                  </div>
+                )}
+                
                 <p>{business.description}</p>
               </div>
+
+              <div className="calendar-footer">
+                <div className="avatar-stack">
+                  {business.ownerAvatar ? (
+                    <img src={business.ownerAvatar} alt="Owner" className="avatar-mini" />
+                  ) : (
+                    <div className="avatar-mini">{username.charAt(0).toUpperCase()}</div>
+                  )}
+                  {/* Future: map over other allowed users here */}
+                </div>
+
+                <div className="calendar-stars">
+                  {!isOwner && (
+                    <button 
+                      className={`star-btn ${business.hasLiked ? 'liked' : ''}`} 
+                      onClick={() => toggleStar(business)}
+                      title={business.hasLiked ? 'Unlike' : 'Like'}
+                    >
+                      {business.hasLiked ? '★' : '☆'}
+                    </button>
+                  )}
+                  {isOwner && <span style={{fontSize: '1.2rem', color: '#f59e0b'}}>★</span>}
+                  <span>{business.likesCount}</span>
+                </div>
+              </div>
+
               <Link to={`/calendar/${business.slug}`} className="login-button visit-business-btn">
                 Go to Page
               </Link>
@@ -413,50 +566,72 @@ function Profile({ user }) {
         </div>
       )}
 
-      {/* Create Calendar Modal */}
-      {isCreateModalOpen && isOwner && (
+      {/* Create/Edit Calendar Modal */}
+      {isCalendarModalOpen && isOwner && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3>Create New Calendar</h3>
-            <form onSubmit={handleCreateCalendarSave}>
+            <h3>{isEditingCalendar ? 'Edit Calendar' : 'Create New Calendar'}</h3>
+            <form onSubmit={handleCalendarSave}>
               <div className="form-group">
                 <label>Calendar Name (Business Name)</label>
                 <input 
                   type="text" 
-                  value={newCalendar.name} 
-                  onChange={(e) => setNewCalendar({...newCalendar, name: e.target.value})} 
+                  value={calendarForm.name} 
+                  onChange={(e) => setCalendarForm({...calendarForm, name: e.target.value})} 
                   className="auth-input" 
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Calendar ID (Used for links, e.g. /calendar/my-id)</label>
+                <input 
+                  type="text" 
+                  value={calendarForm.calendarId} 
+                  onChange={(e) => setCalendarForm({...calendarForm, calendarId: e.target.value})} 
+                  className="auth-input" 
+                  placeholder="my-business-calendar"
                   required
                 />
               </div>
               <div className="form-group">
                 <label>Description</label>
                 <textarea 
-                  value={newCalendar.description} 
-                  onChange={(e) => setNewCalendar({...newCalendar, description: e.target.value})} 
+                  value={calendarForm.description} 
+                  onChange={(e) => setCalendarForm({...calendarForm, description: e.target.value})} 
                   className="auth-input"
                   rows="3"
                   required
                 ></textarea>
               </div>
+              <div className="form-group">
+                <label>Tags (comma separated, no # needed)</label>
+                <input 
+                  type="text" 
+                  value={calendarForm.tags} 
+                  onChange={(e) => setCalendarForm({...calendarForm, tags: e.target.value})} 
+                  className="auth-input" 
+                  placeholder="e.g. Consultation, Remote"
+                />
+              </div>
+              
               <div className="form-group checkbox-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <input 
                   type="checkbox" 
                   id="isPrivate"
-                  checked={newCalendar.isPrivate} 
-                  onChange={(e) => setNewCalendar({...newCalendar, isPrivate: e.target.checked})} 
+                  checked={calendarForm.isPrivate} 
+                  onChange={(e) => setCalendarForm({...calendarForm, isPrivate: e.target.checked})} 
                 />
                 <label htmlFor="isPrivate" style={{ margin: 0, cursor: 'pointer' }}>Make this calendar private</label>
               </div>
               
-              {newCalendar.isPrivate && (
+              {calendarForm.isPrivate && (
                 <div className="form-group" style={{ marginTop: '1rem' }}>
                   <label>Allowed Usernames (comma separated)</label>
                   <input 
                     type="text" 
                     placeholder="e.g. @johndoe, @janedoe"
-                    value={newCalendar.allowedUsernames} 
-                    onChange={(e) => setNewCalendar({...newCalendar, allowedUsernames: e.target.value})} 
+                    value={calendarForm.allowedUsernames} 
+                    onChange={(e) => setCalendarForm({...calendarForm, allowedUsernames: e.target.value})} 
                     className="auth-input" 
                   />
                   <small style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>Only these users will be able to access this calendar. Must start with '@'.</small>
@@ -464,8 +639,8 @@ function Profile({ user }) {
               )}
 
               <div className="modal-actions">
-                <button type="button" className="login-button" onClick={() => setIsCreateModalOpen(false)}>Cancel</button>
-                <button type="submit" className="primary-button">Create</button>
+                <button type="button" className="login-button" onClick={() => setIsCalendarModalOpen(false)}>Cancel</button>
+                <button type="submit" className="primary-button">{isEditingCalendar ? 'Save Changes' : 'Create'}</button>
               </div>
             </form>
           </div>
