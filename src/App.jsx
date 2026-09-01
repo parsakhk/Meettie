@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import './App.css';
 import { supabase } from './lib/supabase.js';
+import Profile from './Profile';
 
 // Import feature images
 import imgBusinessCalendar from './assets/features/business_calendar.jpg';
@@ -406,18 +407,6 @@ function Home() {
   );
 }
 
-function Profile({ user }) {
-  if (!user) return <div style={{ padding: '6rem 2rem', textAlign: 'center' }}>Please log in to view this page.</div>;
-  
-  const firstName = user.user_metadata?.first_name || 'User';
-  
-  return (
-    <div style={{ padding: '6rem 2rem', textAlign: 'center', minHeight: 'calc(100vh - 160px)' }}>
-      <h1 className="hero-title">Hi {firstName}!</h1>
-      <p className="hero-subtitle">Welcome to your Meettie dashboard.</p>
-    </div>
-  );
-}
 
 function Verify() {
   // With Supabase, email verification is typically handled by clicking a link which redirects to the app.
