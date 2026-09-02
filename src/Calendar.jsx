@@ -230,60 +230,63 @@ function Calendar({ user }) {
               </div>
             </div>
           )}
-        </div>
 
-        {/* Divider showing Owners and Admins */}
-        <hr style={{ margin: '1.5rem 0', borderColor: 'var(--border)', opacity: 0.5 }} />
-        
-        <div className="calendar-team">
-          <h3 style={{ fontSize: '1rem', marginBottom: '1rem', color: 'var(--text-muted)' }}>Team</h3>
-          
-          {/* Owner */}
-          {owner && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-              <Link to={`/profile/${owner.username}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: 'inherit' }}>
-                {owner.avatar_url ? (
-                  <img src={owner.avatar_url} alt={owner.username} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 'bold' }}>
-                    {owner.username.charAt(0).toUpperCase()}
+          {/* Team Section */}
+          <div className="profile-field-static" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+            <h3 style={{ fontSize: '1rem', marginBottom: '1rem', color: 'var(--text-muted)' }}>Team</h3>
+            
+            {/* Owner */}
+            {owner && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                <Link to={`/profile/${owner.username}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: 'inherit' }}>
+                  {owner.avatar_url ? (
+                    <img src={owner.avatar_url} alt={owner.username} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 'bold' }}>
+                      {owner.username.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontWeight: 500 }}>@{owner.username}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Owner</div>
                   </div>
-                )}
-                <div>
-                  <div style={{ fontWeight: 500 }}>@{owner.username}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Owner</div>
-                </div>
-              </Link>
-            </div>
-          )}
+                </Link>
+              </div>
+            )}
 
-          {/* Admins */}
-          {admins.map(admin => (
-            <div key={admin.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-              <Link to={`/profile/${admin.username}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: 'inherit' }}>
-                {admin.avatar_url ? (
-                  <img src={admin.avatar_url} alt={admin.username} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--border)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 'bold' }}>
-                    {admin.username.charAt(0).toUpperCase()}
+            {/* Admins */}
+            {admins.map(admin => (
+              <div key={admin.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                <Link to={`/profile/${admin.username}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: 'inherit' }}>
+                  {admin.avatar_url ? (
+                    <img src={admin.avatar_url} alt={admin.username} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--border)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', fontWeight: 'bold' }}>
+                      {admin.username.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontWeight: 500 }}>@{admin.username}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Admin</div>
                   </div>
+                </Link>
+                {isOwner && (
+                  <button 
+                    onClick={() => handleRemoveAdmin(admin.username)}
+                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.25rem' }}
+                    title="Remove Admin"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                  </button>
                 )}
-                <div>
-                  <div style={{ fontWeight: 500 }}>@{admin.username}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Admin</div>
-                </div>
-              </Link>
-              {isOwner && (
-                <button 
-                  onClick={() => handleRemoveAdmin(admin.username)}
-                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.875rem' }}
-                  title="Remove Admin"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          ))}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
