@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Link, useNavigate, useSearchParams } from
 import './App.css';
 import { supabase } from './lib/supabase.js';
 import Profile from './Profile';
+import Search from './Search';
+import Calendar from './Calendar';
 
 // Import feature images
 import imgBusinessCalendar from './assets/features/business_calendar.jpg';
@@ -45,6 +47,17 @@ function CalendarGraphic() {
 }
 
 function Navbar({ theme, toggleTheme, user, onLogout }) {
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      setSearchQuery('');
+    }
+  };
+
   return (
     <nav className="navbar">
       <div className="nav-container">
@@ -58,6 +71,19 @@ function Navbar({ theme, toggleTheme, user, onLogout }) {
           </svg>
           Meettie
         </Link>
+        <form onSubmit={handleSearch} className="nav-search-form" style={{ display: 'flex', alignItems: 'center', margin: '0 auto', gap: 0 }}>
+          <input 
+            type="text" 
+            placeholder="Search @user, #id or calendar..." 
+            value={searchQuery} 
+            onChange={(e) => setSearchQuery(e.target.value)} 
+            className="auth-input"
+            style={{ padding: '0.4rem 1rem', borderRadius: '20px 0 0 20px', borderRight: 'none', height: '36px', width: '250px', margin: 0 }}
+          />
+          <button type="submit" className="primary-button" style={{ height: '36px', padding: '0 1rem', borderRadius: '0 20px 20px 0', margin: 0 }}>
+            Search
+          </button>
+        </form>
         <div className="nav-actions">
           <button className="theme-switcher" onClick={toggleTheme} aria-label="Toggle Theme">
             {theme === 'light' ? (
@@ -474,6 +500,8 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/verify" element={<Verify />} />
             <Route path="/profile/:username" element={<Profile user={user} />} />
+            <Route path="/search" element={<Search />} />
+            <Route path="/calendar/:slug" element={<Calendar user={user} />} />
           </Routes>
         </main>
         <Footer />

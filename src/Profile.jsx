@@ -76,22 +76,62 @@ function Profile({ user }) {
         tags: profile.tags || []
       });
 
-      // Fetch Calendars and their likes
-      const { data: cals } = await supabase
+      // Fetch Owned Calendars
+      const { data: ownedCals } = await supabase
         .from('calendars')
         .select('*, calendar_likes(*)')
         .eq('user_id', profile.id)
         .order('created_at', { ascending: false });
 
-      if (cals) {
-        // Map the likes array to just useful properties for the frontend
-        const enrichedCals = cals.map(cal => ({
+      let allCals = ownedCals ? [...ownedCals] : [];
+      
+      // Fetch Admin Calendars
+      const { data: accessData } = await supabase
+        .from('calendar_access')
+        .select('calendar_id')
+        .eq('username', '@' + profile.username);
+        
+      if (accessData && accessData.length > 0) {
+        const adminCalIds = accessData.map(a => a.calendar_id);
+        if (adminCalIds.length > 0) {
+          const { data: adminCals } = await supabase
+            .from('calendars')
+            .select('*, calendar_likes(*)')
+            .in('id', adminCalIds)
+            .order('created_at', { ascending: false });
+            
+          if (adminCals) {
+            const existingIds = new Set(allCals.map(c => c.id));
+            const newAdminCals = adminCals.filter(c => !existingIds.has(c.id));
+            allCals = [...allCals, ...newAdminCals];
+          }
+        }
+      }
+
+      // We need owner avatars for allCals.
+      const ownerIds = [...new Set(allCals.map(c => c.user_id))];
+      let ownerAvatarMap = {};
+      if (ownerIds.length > 0) {
+        const { data: owners } = await supabase
+          .from('profiles')
+          .select('id, avatar_url')
+          .in('id', ownerIds);
+          
+        if (owners) {
+          owners.forEach(o => { ownerAvatarMap[o.id] = o.avatar_url; });
+        }
+      }
+
+      if (allCals.length > 0) {
+        const enrichedCals = allCals.map(cal => ({
           ...cal,
           likesCount: cal.calendar_likes ? cal.calendar_likes.length : 0,
           hasLiked: user ? (cal.calendar_likes || []).some(like => like.user_id === user.id) : false,
-          ownerAvatar: profile.avatar_url || '' // For the avatar stack
+          ownerAvatar: ownerAvatarMap[cal.user_id] || '' 
         }));
         setBusinesses(enrichedCals);
+      } else {
+        setBusinesses([]);
       }
 
     } catch (error) {
@@ -469,7 +509,7 @@ function Profile({ user }) {
                   Go to Page
                 </Link>
                 
-                {isOwner && (
+                {isOwner && business.user_id === user?.id && (
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button className="login-button visit-business-btn" style={{ marginTop: 0, flex: 1, backgroundColor: '#3b82f6', color: 'white', borderColor: '#3b82f6' }} onClick={() => openEditCalendar(business)}>
                       Edit
