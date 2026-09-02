@@ -60,7 +60,7 @@ function Search() {
 
   return (
     <div style={{ padding: '6rem 2rem', minHeight: 'calc(100vh - 160px)', maxWidth: '1200px', margin: '0 auto' }}>
-      <h1>Search Results for "{query}"</h1>
+      <h1 style={{ marginBottom: '2.5rem' }}>Search Results for "{query}"</h1>
       {loading && <p>Loading...</p>}
       
       {!loading && users.length === 0 && calendars.length === 0 && query && (
@@ -68,8 +68,8 @@ function Search() {
       )}
 
       {!loading && users.length > 0 && (
-        <div style={{ marginBottom: '2rem' }}>
-          <h2>Users</h2>
+        <div style={{ marginBottom: '3rem' }}>
+          <h2 style={{ marginBottom: '1.5rem', color: 'var(--text-muted)' }}>Users</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {users.map(user => (
               <Link to={`/profile/${user.username}`} key={user.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', textDecoration: 'none', color: 'var(--text)' }}>
@@ -88,7 +88,7 @@ function Search() {
 
       {!loading && calendars.length > 0 && (
         <div>
-          <h2>Calendars</h2>
+          <h2 style={{ marginBottom: '1.5rem', color: 'var(--text-muted)' }}>Calendars</h2>
           <div className="businesses-grid">
             {calendars.map(cal => (
               <div key={cal.id} className="business-card">

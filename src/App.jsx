@@ -60,7 +60,7 @@ function Navbar({ theme, toggleTheme, user, onLogout }) {
 
   return (
     <nav className="navbar">
-      <div className="nav-container">
+      <div className="nav-container" style={{ position: 'relative' }}>
         <Link to="/" className="nav-logo">
           <svg className="nav-logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -71,19 +71,21 @@ function Navbar({ theme, toggleTheme, user, onLogout }) {
           </svg>
           Meettie
         </Link>
-        <form onSubmit={handleSearch} className="nav-search-form" style={{ display: 'flex', alignItems: 'center', margin: '0 auto', gap: 0 }}>
-          <input 
-            type="text" 
-            placeholder="Search @user, #id or calendar..." 
-            value={searchQuery} 
-            onChange={(e) => setSearchQuery(e.target.value)} 
-            className="auth-input"
-            style={{ padding: '0.4rem 1rem', borderRadius: '20px 0 0 20px', borderRight: 'none', height: '36px', width: '250px', margin: 0 }}
-          />
-          <button type="submit" className="primary-button" style={{ height: '36px', padding: '0 1rem', borderRadius: '0 20px 20px 0', margin: 0 }}>
-            Search
-          </button>
-        </form>
+        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
+          <form onSubmit={handleSearch} className="nav-search-form" style={{ display: 'flex', alignItems: 'center', gap: 0, margin: 0 }}>
+            <input 
+              type="text" 
+              placeholder="Search @user, #id or calendar..." 
+              value={searchQuery} 
+              onChange={(e) => setSearchQuery(e.target.value)} 
+              className="auth-input"
+              style={{ padding: '0.4rem 1rem', borderRadius: '20px 0 0 20px', borderRight: 'none', height: '36px', width: '250px', margin: 0 }}
+            />
+            <button type="submit" className="primary-button" style={{ height: '36px', padding: '0 1rem', borderRadius: '0 20px 20px 0', margin: 0 }}>
+              Search
+            </button>
+          </form>
+        </div>
         <div className="nav-actions">
           <button className="theme-switcher" onClick={toggleTheme} aria-label="Toggle Theme">
             {theme === 'light' ? (
