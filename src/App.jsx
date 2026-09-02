@@ -567,8 +567,8 @@ function App() {
             <Route path="/profile/:username" element={<Profile user={user} />} />
             <Route path="/search" element={<Search />} />
             <Route path="/calendar/:slug" element={<Calendar user={user} />} />
-            <Route path="/chats" element={user ? <Chats user={user} /> : <Login onLogin={handleLogin} />} />
-            <Route path="/chats/:roomId" element={user ? <Chats user={user} /> : <Login onLogin={handleLogin} />} />
+            <Route path="/chats" element={user ? <Chats user={user} /> : <Login />} />
+            <Route path="/chats/:roomId" element={user ? <Chats user={user} /> : <Login />} />
           </Routes>
         </main>
         <Footer />
