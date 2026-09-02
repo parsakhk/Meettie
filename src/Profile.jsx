@@ -68,6 +68,8 @@ function Profile({ user }) {
       }
 
       setProfileData({
+        id: profile.id,
+        username: profile.username,
         profilePicture: profile.avatar_url || '',
         fullName: fullName,
         bio: profile.bio || '',
@@ -89,7 +91,7 @@ function Profile({ user }) {
       const { data: accessData } = await supabase
         .from('calendar_access')
         .select('calendar_id')
-        .eq('username', '@' + profile.username);
+        .in('username', [profile.username, '@' + profile.username]);
         
       if (accessData && accessData.length > 0) {
         const adminCalIds = accessData.map(a => a.calendar_id);
