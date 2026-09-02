@@ -480,3 +480,15 @@
   border: none;
   cursor: default;
 }
+
+ / *   N a v   D r o p d o w n   S t y l e s   * / 
+ . n a v - d r o p d o w n - i t e m   { 
+     d i s p l a y :   b l o c k ; 
+     t e x t - d e c o r a t i o n :   n o n e ; 
+     t r a n s i t i o n :   b a c k g r o u n d - c o l o r   0 . 2 s   e a s e ; 
+ } 
+ . n a v - d r o p d o w n - i t e m : h o v e r   { 
+     b a c k g r o u n d - c o l o r :   v a r ( - - h o v e r - b g ) ; 
+ } 
+  
+ 

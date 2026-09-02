@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import './Profile.css';
 
@@ -138,6 +138,43 @@ function Profile({ user }) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const navigate = useNavigate();
+
+  // Handle Chat Request
+  const handleChatClick = async () => {
+    if (!user) {
+      alert("You must be logged in to chat.");
+      return;
+    }
+    
+    // Check if room exists
+    const { data: rooms, error: fetchError } = await supabase
+      .from('chat_rooms')
+      .select('id')
+      .or(`and(initiator_id.eq.${user.id},receiver_id.eq.${profileData.id}),and(initiator_id.eq.${profileData.id},receiver_id.eq.${user.id})`);
+      
+    if (!fetchError && rooms && rooms.length > 0) {
+      navigate(`/chats/${rooms[0].id}`);
+    } else {
+      // Create room
+      const { data: newRoom, error } = await supabase
+        .from('chat_rooms')
+        .insert({
+          initiator_id: user.id,
+          receiver_id: profileData.id,
+          status: 'pending'
+        })
+        .select()
+        .single();
+        
+      if (!error && newRoom) {
+        navigate(`/chats/${newRoom.id}`);
+      } else {
+        alert("Failed to initiate chat. Did you run the SQL to create the chat tables?");
+      }
     }
   };
 
@@ -409,9 +446,17 @@ function Profile({ user }) {
           )}
         </div>
         
-        <div className="profile-username" style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', marginTop: '-1rem', fontWeight: 500 }}>
+        <div className="profile-username" style={{ color: 'var(--text-muted)', marginBottom: '0.5rem', marginTop: '-1rem', fontWeight: 500 }}>
           @{username}
         </div>
+
+        {!isOwner && user && (
+          <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+            <button onClick={handleChatClick} className="primary-button" style={{ padding: '0.5rem 1.5rem', fontSize: '0.875rem', width: 'auto' }}>
+              Message / Chat
+            </button>
+          </div>
+        )}
 
         {/* User Info Fields */}
         <div className="profile-info">
