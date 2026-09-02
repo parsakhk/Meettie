@@ -156,7 +156,7 @@ function Profile({ user }) {
     const { data: rooms, error: fetchError } = await supabase
       .from('chat_rooms')
       .select('id')
-      .or(`and(initiator_id.eq.${user.id},receiver_id.eq.${profileData.id}),and(initiator_id.eq.${profileData.id},receiver_id.eq.${user.id})`);
+      .or(`and(initiator_id.eq.${user.id},receiver_id.eq.${profileId}),and(initiator_id.eq.${profileId},receiver_id.eq.${user.id})`);
       
     if (!fetchError && rooms && rooms.length > 0) {
       navigate(`/chats/${rooms[0].id}`);
@@ -166,7 +166,7 @@ function Profile({ user }) {
         .from('chat_rooms')
         .insert({
           initiator_id: user.id,
-          receiver_id: profileData.id,
+          receiver_id: profileId,
           status: 'pending'
         })
         .select()

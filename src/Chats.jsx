@@ -83,7 +83,7 @@ function Chats({ user }) {
       
       // We need to fetch the profiles for the other user manually because Supabase auth.users can't be directly joined easily unless we use profiles.
       // Assuming 'initiator_id' and 'receiver_id' match 'id' in 'profiles'
-      const otherUserIds = data.map(r => r.initiator_id === user.id ? r.receiver_id : r.initiator_id);
+      const otherUserIds = data.map(r => r.initiator_id === user.id ? r.receiver_id : r.initiator_id).filter(Boolean);
       
       if (otherUserIds.length === 0) {
         setChatRooms([]);
