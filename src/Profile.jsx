@@ -470,14 +470,14 @@ function Profile({ user }) {
                 </Link>
                 
                 {isOwner && (
-                  <>
-                    <button className="login-button visit-business-btn" style={{ marginTop: 0 }} onClick={() => openEditCalendar(business)}>
-                      Edit Calendar
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="login-button visit-business-btn" style={{ marginTop: 0, flex: 1, backgroundColor: '#3b82f6', color: 'white', borderColor: '#3b82f6' }} onClick={() => openEditCalendar(business)}>
+                      Edit
                     </button>
-                    <button className="login-button visit-business-btn" style={{ marginTop: 0, borderColor: '#ef4444', color: '#ef4444' }} onClick={() => deleteCalendar(business.id)}>
-                      Delete Calendar
+                    <button className="login-button visit-business-btn" style={{ marginTop: 0, flex: 1, borderColor: '#ef4444', color: '#ef4444' }} onClick={() => deleteCalendar(business.id)}>
+                      Delete
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
 
