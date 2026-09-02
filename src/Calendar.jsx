@@ -3,6 +3,119 @@ import { useParams, Link } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import './Profile.css';
 
+const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function AvailabilityModal({ isOpen, onClose, initialAvailability, onSave }) {
+  const [offDays, setOffDays] = useState(initialAvailability?.offDays || []);
+  const [hours, setHours] = useState(initialAvailability?.hours || []);
+
+  if (!isOpen) return null;
+
+  const toggleOffDay = (dayIndex) => {
+    if (offDays.includes(dayIndex)) {
+      setOffDays(offDays.filter(d => d !== dayIndex));
+    } else {
+      setOffDays([...offDays, dayIndex]);
+    }
+  };
+
+  const addHourRule = (type) => {
+    setHours([...hours, { type, start: '09:00', end: '17:00', reason: '' }]);
+  };
+
+  const updateHourRule = (index, field, value) => {
+    const newHours = [...hours];
+    newHours[index][field] = value;
+    setHours(newHours);
+  };
+
+  const removeHourRule = (index) => {
+    setHours(hours.filter((_, i) => i !== index));
+  };
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    onSave({ offDays, hours });
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content" style={{ maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
+        <h3>Set Calendar Availability</h3>
+        <form onSubmit={handleSave}>
+          
+          <div className="form-group">
+            <label style={{ marginBottom: '0.5rem', display: 'block', fontWeight: 600 }}>Off Days (Entire day unselectable)</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {DAYS_OF_WEEK.map((day, idx) => (
+                <label key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'var(--bg)', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border)', cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={offDays.includes(idx)} 
+                    onChange={() => toggleOffDay(idx)} 
+                  />
+                  {day}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <label style={{ margin: 0, fontWeight: 600 }}>Specific Hours</label>
+              <div>
+                <button type="button" onClick={() => addHourRule('best')} style={{ marginRight: '0.5rem', padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} className="login-button">
+                  + Add Best Hours
+                </button>
+                <button type="button" onClick={() => addHourRule('off')} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} className="login-button">
+                  + Add Off Hours
+                </button>
+              </div>
+            </div>
+            
+            {hours.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No specific hour rules set.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {hours.map((rule, idx) => (
+                  <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', padding: '0.75rem', background: 'var(--bg)', borderRadius: '4px', border: `1px solid ${rule.type === 'best' ? '#10b981' : '#ef4444'}` }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.75rem', color: rule.type === 'best' ? '#10b981' : '#ef4444', textTransform: 'uppercase' }}>
+                          {rule.type}
+                        </span>
+                        <input type="time" value={rule.start} onChange={(e) => updateHourRule(idx, 'start', e.target.value)} className="auth-input" style={{ padding: '0.25rem', width: 'auto' }} required />
+                        <span>to</span>
+                        <input type="time" value={rule.end} onChange={(e) => updateHourRule(idx, 'end', e.target.value)} className="auth-input" style={{ padding: '0.25rem', width: 'auto' }} required />
+                      </div>
+                      <input 
+                        type="text" 
+                        placeholder={rule.type === 'best' ? "Reason (e.g., Deep Work Focus)" : "Reason (e.g., Lunch Break)"} 
+                        value={rule.reason} 
+                        onChange={(e) => updateHourRule(idx, 'reason', e.target.value)} 
+                        className="auth-input"
+                        style={{ padding: '0.25rem 0.5rem' }}
+                      />
+                    </div>
+                    <button type="button" onClick={() => removeHourRule(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem' }} aria-label="Remove Rule">
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="modal-actions" style={{ marginTop: '2rem' }}>
+            <button type="button" className="login-button" onClick={onClose}>Cancel</button>
+            <button type="submit" className="primary-button">Publish</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function Calendar({ user }) {
   const { slug } = useParams();
   const [loading, setLoading] = useState(true);
@@ -13,6 +126,14 @@ function Calendar({ user }) {
   // Edit Calendar Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editData, setEditData] = useState({ name: '', description: '', tags: '' });
+  
+  // Availability Modal
+  const [isAvailabilityOpen, setIsAvailabilityOpen] = useState(false);
+
+  // Calendar Grid State
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [appointments, setAppointments] = useState([]); // Placeholder for appointments
   
   useEffect(() => {
     if (slug) {
@@ -35,6 +156,11 @@ function Calendar({ user }) {
         return;
       }
       
+      // Ensure availability has a default shape
+      if (!calData.availability) {
+        calData.availability = { offDays: [], hours: [] };
+      }
+
       setCalendarData(calData);
       setEditData({
         name: calData.name,
@@ -84,7 +210,7 @@ function Calendar({ user }) {
     setIsModalOpen(true);
   };
 
-  const handleSave = async (e) => {
+  const handleSaveInfo = async (e) => {
     e.preventDefault();
     if (!isOwner) return;
     
@@ -111,6 +237,22 @@ function Calendar({ user }) {
       setIsModalOpen(false);
     } catch (err) {
       alert('Error updating calendar: ' + err.message);
+    }
+  };
+
+  const handleSaveAvailability = async (newAvailability) => {
+    try {
+      const { error } = await supabase
+        .from('calendars')
+        .update({ availability: newAvailability })
+        .eq('id', calendarData.id);
+        
+      if (error) throw error;
+      
+      setCalendarData(prev => ({ ...prev, availability: newAvailability }));
+      setIsAvailabilityOpen(false);
+    } catch (err) {
+      alert('Error saving availability: ' + err.message);
     }
   };
 
@@ -163,6 +305,61 @@ function Calendar({ user }) {
     } catch (err) {
       alert('Error removing admin: ' + err.message);
     }
+  };
+
+  // Calendar Grid Logic
+  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+
+  const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+
+  const renderCalendarGrid = () => {
+    if (!calendarData) return null;
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(year, month);
+    const firstDay = getFirstDayOfMonth(year, month);
+    
+    const offDays = calendarData.availability?.offDays || [];
+    
+    const days = [];
+    // Empty slots before 1st of month
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<div key={`empty-${i}`} className="cal-day empty"></div>);
+    }
+    
+    // Actual days
+    for (let i = 1; i <= daysInMonth; i++) {
+      const date = new Date(year, month, i);
+      const dayOfWeek = date.getDay();
+      const isOffDay = offDays.includes(dayOfWeek);
+      const isSelected = selectedDate.getDate() === i && selectedDate.getMonth() === month && selectedDate.getFullYear() === year;
+      const isPast = date < new Date(new Date().setHours(0,0,0,0));
+
+      let className = "cal-day";
+      if (isSelected) className += " selected";
+      if (isOffDay || isPast) className += " disabled";
+
+      days.push(
+        <div 
+          key={i} 
+          className={className}
+          onClick={() => {
+            if (!isOffDay && !isPast) {
+              setSelectedDate(date);
+              // Fetch appointments for this date (to be implemented)
+              setAppointments([]); 
+            }
+          }}
+        >
+          {i}
+        </div>
+      );
+    }
+
+    return days;
   };
 
   if (loading) return <div style={{ padding: '6rem 2rem', textAlign: 'center' }}>Loading calendar...</div>;
@@ -230,7 +427,7 @@ function Calendar({ user }) {
               </div>
             </div>
           )}
-
+          
           {/* Team Section */}
           <div className="profile-field-static" style={{ borderBottom: 'none', paddingBottom: 0 }}>
             <h3 style={{ fontSize: '1rem', marginBottom: '1rem', color: 'var(--text-muted)' }}>Team</h3>
@@ -292,28 +489,71 @@ function Calendar({ user }) {
 
       {/* Right Big Option Area */}
       <div className="profile-main-content">
-        <div className="businesses-header">
-          <h2>Calendar Events</h2>
+        <div className="businesses-header" style={{ alignItems: 'flex-start' }}>
+          <div>
+            <h2>Book an Appointment</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem' }}>Select a date and time to meet with {calendarData.name}</p>
+          </div>
           {isOwner && (
-            <button className="primary-button create-calendar-btn">
-              + New Event
+            <button className="primary-button create-calendar-btn" onClick={() => setIsAvailabilityOpen(true)}>
+              Set Availability
             </button>
           )}
         </div>
         
-        <div className="businesses-grid">
-          <div className="empty-businesses">
-            <p>No events scheduled yet.</p>
+        {/* Interactive Calendar Grid */}
+        <div className="calendar-grid-container" style={{ marginTop: '2rem', background: 'var(--bg)', padding: '1.5rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+          <div className="cal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <button onClick={prevMonth} className="login-button" style={{ padding: '0.5rem 1rem' }}>&larr; Prev</button>
+            <h3 style={{ margin: 0, fontSize: '1.25rem' }}>
+              {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+            </h3>
+            <button onClick={nextMonth} className="login-button" style={{ padding: '0.5rem 1rem' }}>Next &rarr;</button>
+          </div>
+          
+          <div className="cal-weekdays" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem', marginBottom: '0.5rem', textAlign: 'center', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
+          </div>
+          
+          <div className="cal-days-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem' }}>
+            {renderCalendarGrid()}
           </div>
         </div>
+
+        {/* Appointments Section */}
+        <div className="appointments-section" style={{ marginTop: '3rem' }}>
+          <h3 style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
+            Appointments on {selectedDate.toLocaleDateString()}
+          </h3>
+          
+          {appointments.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {appointments.map((appt, idx) => (
+                <div key={idx} style={{ padding: '1rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px' }}>
+                  <strong>{appt.time}</strong> - {appt.title}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: 'var(--text-muted)' }}>No appointments scheduled for this day.</p>
+          )}
+        </div>
       </div>
+
+      {/* Availability Modal */}
+      <AvailabilityModal 
+        isOpen={isAvailabilityOpen} 
+        onClose={() => setIsAvailabilityOpen(false)} 
+        initialAvailability={calendarData.availability}
+        onSave={handleSaveAvailability}
+      />
 
       {/* Edit Calendar Modal */}
       {isModalOpen && isOwner && (
         <div className="modal-overlay">
           <div className="modal-content">
             <h3>Edit Calendar Info</h3>
-            <form onSubmit={handleSave}>
+            <form onSubmit={handleSaveInfo}>
               <div className="form-group">
                 <label>Calendar Name</label>
                 <input 
