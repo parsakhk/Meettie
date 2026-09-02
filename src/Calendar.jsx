@@ -130,16 +130,27 @@ function Calendar({ user }) {
   // Availability Modal
   const [isAvailabilityOpen, setIsAvailabilityOpen] = useState(false);
 
+  // Appoint Modal
+  const [isAppointOpen, setIsAppointOpen] = useState(false);
+  const [appointForm, setAppointForm] = useState({ title: '', description: '', isPrivate: false, time: '10:00' });
+  const [isAppointing, setIsAppointing] = useState(false);
+
   // Calendar Grid State
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [appointments, setAppointments] = useState([]); // Placeholder for appointments
+  const [appointments, setAppointments] = useState([]);
   
   useEffect(() => {
     if (slug) {
       fetchCalendarDetails();
     }
   }, [slug]);
+
+  useEffect(() => {
+    if (calendarData) {
+      fetchAppointments(selectedDate, calendarData, admins);
+    }
+  }, [selectedDate, calendarData, admins, user]);
 
   const fetchCalendarDetails = async () => {
     try {
@@ -200,6 +211,43 @@ function Calendar({ user }) {
       console.error('Error fetching calendar details:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAppointments = async (date, calData, currentAdmins) => {
+    try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0,0,0,0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23,59,59,999);
+
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('calendar_id', calData.id)
+        .gte('start_time', startOfDay.toISOString())
+        .lte('start_time', endOfDay.toISOString())
+        .order('start_time', { ascending: true });
+        
+      if (error) {
+        // If table doesn't exist yet, just return empty array
+        setAppointments([]);
+        return;
+      }
+
+      const isCurrentOwner = user && user.id === calData.user_id;
+      const isCurrentAdmin = user && currentAdmins.some(a => a.username === user.user_metadata?.username); // admins state holds profiles which have .username
+
+      const visibleAppts = (data || []).filter(appt => {
+        if (!appt.is_private) return true;
+        if (isCurrentOwner || isCurrentAdmin) return true;
+        if (user && appt.user_id === user.id) return true;
+        return false;
+      });
+
+      setAppointments(visibleAppts);
+    } catch (err) {
+      console.error("Failed to fetch appointments", err);
     }
   };
 
@@ -307,6 +355,52 @@ function Calendar({ user }) {
     }
   };
 
+  const handleAppointSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      alert("You must be logged in to make an appointment.");
+      return;
+    }
+
+    setIsAppointing(true);
+    try {
+      // Build proper start and end time from the selected date and chosen time
+      const [hours, minutes] = appointForm.time.split(':');
+      const startTime = new Date(selectedDate);
+      startTime.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+      
+      // Default duration is 1 hour
+      const endTime = new Date(startTime);
+      endTime.setHours(startTime.getHours() + 1);
+
+      const { error } = await supabase
+        .from('appointments')
+        .insert({
+          calendar_id: calendarData.id,
+          user_id: user.id,
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+          status: 'pending',
+          notes: JSON.stringify({
+            title: appointForm.title,
+            description: appointForm.description,
+          }),
+          is_private: appointForm.isPrivate
+        });
+        
+      if (error) throw error;
+
+      alert('Appointment request submitted successfully!');
+      setIsAppointOpen(false);
+      setAppointForm({ title: '', description: '', isPrivate: false, time: '10:00' });
+      fetchAppointments(selectedDate, calendarData, admins);
+    } catch (err) {
+      alert('Error creating appointment (Make sure appointments table exists!): ' + err.message);
+    } finally {
+      setIsAppointing(false);
+    }
+  };
+
   // Calendar Grid Logic
   const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
@@ -349,8 +443,6 @@ function Calendar({ user }) {
           onClick={() => {
             if (!isOffDay && !isPast) {
               setSelectedDate(date);
-              // Fetch appointments for this date (to be implemented)
-              setAppointments([]); 
             }
           }}
         >
@@ -364,6 +456,8 @@ function Calendar({ user }) {
 
   if (loading) return <div style={{ padding: '6rem 2rem', textAlign: 'center' }}>Loading calendar...</div>;
   if (!calendarData) return <div style={{ padding: '6rem 2rem', textAlign: 'center' }}>Calendar not found.</div>;
+
+  const isCurrentAdmin = user && admins.some(a => a.username === user.user_metadata?.username);
 
   return (
     <div className="profile-page-container">
@@ -518,6 +612,19 @@ function Calendar({ user }) {
           <div className="cal-days-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem' }}>
             {renderCalendarGrid()}
           </div>
+          
+          <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+             <button 
+                className="primary-button" 
+                style={{ width: 'auto', padding: '0.75rem 2rem', fontSize: '1.1rem' }}
+                onClick={() => {
+                   if (!user) { alert("You must be logged in to make an appointment."); return; }
+                   setIsAppointOpen(true);
+                }}
+             >
+               Appoint
+             </button>
+          </div>
         </div>
 
         {/* Appointments Section */}
@@ -528,17 +635,102 @@ function Calendar({ user }) {
           
           {appointments.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {appointments.map((appt, idx) => (
-                <div key={idx} style={{ padding: '1rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px' }}>
-                  <strong>{appt.time}</strong> - {appt.title}
-                </div>
-              ))}
+              {appointments.map((appt, idx) => {
+                let parsedNotes = { title: 'Appointment', description: '' };
+                try {
+                  parsedNotes = JSON.parse(appt.notes);
+                } catch(e) {}
+                const timeStr = new Date(appt.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                return (
+                  <div key={idx} style={{ padding: '1rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <strong style={{ display: 'block', fontSize: '1.1rem', marginBottom: '0.25rem' }}>{parsedNotes.title}</strong>
+                      <span style={{ color: 'var(--text-muted)' }}>{timeStr} • {parsedNotes.description}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      {appt.is_private && (
+                        <span style={{ fontSize: '0.75rem', background: 'var(--hover-bg)', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}>Private</span>
+                      )}
+                      {(isOwner || isCurrentAdmin) && (
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: appt.status === 'pending' ? '#f59e0b' : '#3b82f6', textTransform: 'uppercase' }}>
+                          {appt.status}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           ) : (
             <p style={{ color: 'var(--text-muted)' }}>No appointments scheduled for this day.</p>
           )}
         </div>
       </div>
+
+      {/* Appoint Modal */}
+      {isAppointOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>Make an Appointment</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+              For {selectedDate.toLocaleDateString()}
+            </p>
+            <form onSubmit={handleAppointSubmit}>
+              <div className="form-group">
+                <label>Title</label>
+                <input 
+                  type="text" 
+                  value={appointForm.title} 
+                  onChange={e => setAppointForm({...appointForm, title: e.target.value})}
+                  className="auth-input" 
+                  placeholder="e.g. Initial Consultation"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea 
+                  value={appointForm.description} 
+                  onChange={e => setAppointForm({...appointForm, description: e.target.value})}
+                  className="auth-input"
+                  rows="3"
+                  placeholder="Briefly describe what you'd like to discuss."
+                  required
+                ></textarea>
+              </div>
+              <div className="form-group">
+                <label>Time</label>
+                <input 
+                  type="time" 
+                  value={appointForm.time} 
+                  onChange={e => setAppointForm({...appointForm, time: e.target.value})}
+                  className="auth-input" 
+                  required
+                />
+              </div>
+              <div className="form-group checkbox-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <input 
+                  type="checkbox" 
+                  id="isPrivateAppointment"
+                  checked={appointForm.isPrivate} 
+                  onChange={(e) => setAppointForm({...appointForm, isPrivate: e.target.checked})} 
+                />
+                <label htmlFor="isPrivateAppointment" style={{ margin: 0, cursor: 'pointer' }}>Make this appointment private</label>
+              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                Private appointments will not be visible to other users viewing this calendar.
+              </p>
+              
+              <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+                <button type="button" className="login-button" onClick={() => setIsAppointOpen(false)}>Cancel</button>
+                <button type="submit" className="primary-button" disabled={isAppointing}>
+                  {isAppointing ? 'Sending...' : 'Request Appointment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Availability Modal */}
       <AvailabilityModal 
