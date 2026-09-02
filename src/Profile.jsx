@@ -183,16 +183,14 @@ function Profile({ user }) {
   };
 
   const openEditCalendar = async (cal) => {
-    // Fetch current access if private
+    // Fetch current access (admins)
     let accessString = '';
-    if (cal.is_private) {
-      const { data: accessData } = await supabase
-        .from('calendar_access')
-        .select('username')
-        .eq('calendar_id', cal.id);
-      if (accessData) {
-        accessString = accessData.map(a => a.username).join(', ');
-      }
+    const { data: accessData } = await supabase
+      .from('calendar_access')
+      .select('username')
+      .eq('calendar_id', cal.id);
+    if (accessData) {
+      accessString = accessData.map(a => a.username).join(', ');
     }
 
     setCalendarForm({
@@ -245,7 +243,7 @@ function Profile({ user }) {
     e.preventDefault();
 
     let allowedUsers = [];
-    if (calendarForm.isPrivate && calendarForm.allowedUsernames) {
+    if (calendarForm.allowedUsernames) {
       const users = calendarForm.allowedUsernames.split(',').map(u => u.trim()).filter(Boolean);
       const invalidUsers = users.filter(u => !u.startsWith('@'));
       if (invalidUsers.length > 0) {
@@ -318,8 +316,8 @@ function Profile({ user }) {
         setBusinesses([newBiz, ...businesses]);
       }
 
-      // Handle Private Users (both for create and update)
-      if (calendarForm.isPrivate && allowedUsers.length > 0) {
+      // Handle Admins/Users (both for create and update)
+      if (allowedUsers.length > 0) {
         const accessRows = allowedUsers.map(un => ({
           calendar_id: savedCalId,
           username: un
@@ -630,19 +628,17 @@ function Profile({ user }) {
                 <label htmlFor="isPrivate" style={{ margin: 0, cursor: 'pointer' }}>Make this calendar private</label>
               </div>
               
-              {calendarForm.isPrivate && (
-                <div className="form-group" style={{ marginTop: '1rem' }}>
-                  <label>Allowed Usernames (comma separated)</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. @johndoe, @janedoe"
-                    value={calendarForm.allowedUsernames} 
-                    onChange={(e) => setCalendarForm({...calendarForm, allowedUsernames: e.target.value})} 
-                    className="auth-input" 
-                  />
-                  <small style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>Only these users will be able to access this calendar. Must start with '@'.</small>
-                </div>
-              )}
+              <div className="form-group" style={{ marginTop: '1rem' }}>
+                <label>Assign Admins (comma separated)</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. @johndoe, @janedoe"
+                  value={calendarForm.allowedUsernames} 
+                  onChange={(e) => setCalendarForm({...calendarForm, allowedUsernames: e.target.value})} 
+                  className="auth-input" 
+                />
+                <small style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>These users will have access/admin rights to your business calendar. Must start with '@'.</small>
+              </div>
 
               <div className="modal-actions">
                 <button type="button" className="login-button" onClick={() => setIsCalendarModalOpen(false)}>Cancel</button>
