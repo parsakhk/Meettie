@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
+import { createNotification } from './lib/notifications';
 import './Profile.css';
 
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -118,6 +119,7 @@ function AvailabilityModal({ isOpen, onClose, initialAvailability, onSave }) {
 
 function Calendar({ user }) {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [calendarData, setCalendarData] = useState(null);
   const [owner, setOwner] = useState(null);
@@ -230,20 +232,34 @@ function Calendar({ user }) {
         .order('start_time', { ascending: true });
         
       if (error) {
-        // If table doesn't exist yet, just return empty array
         setAppointments([]);
         return;
       }
 
       const isCurrentOwner = user && user.id === calData.user_id;
-      const isCurrentAdmin = user && currentAdmins.some(a => a.username === user.user_metadata?.username); // admins state holds profiles which have .username
+      const isCurrentAdmin = user && currentAdmins.some(a => a.username === user.user_metadata?.username);
+
+      const userIds = [...new Set((data || []).map(a => a.user_id).filter(Boolean))];
+      let profileMap = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, username, avatar_url')
+          .in('id', userIds);
+        if (profiles) {
+          profiles.forEach(p => { profileMap[p.id] = p; });
+        }
+      }
 
       const visibleAppts = (data || []).filter(appt => {
         if (!appt.is_private) return true;
         if (isCurrentOwner || isCurrentAdmin) return true;
         if (user && appt.user_id === user.id) return true;
         return false;
-      });
+      }).map(appt => ({
+        ...appt,
+        clientProfile: profileMap[appt.user_id] || null
+      }));
 
       setAppointments(visibleAppts);
     } catch (err) {
@@ -373,7 +389,7 @@ function Calendar({ user }) {
       const endTime = new Date(startTime);
       endTime.setHours(startTime.getHours() + 1);
 
-      const { error } = await supabase
+      const { data: newAppt, error } = await supabase
         .from('appointments')
         .insert({
           calendar_id: calendarData.id,
@@ -386,18 +402,159 @@ function Calendar({ user }) {
             description: appointForm.description,
           }),
           is_private: appointForm.isPrivate
-        });
+        })
+        .select()
+        .single();
         
       if (error) throw error;
 
-      alert('Appointment request submitted successfully!');
+      // Dispatch notification to calendar owner
+      await createNotification({
+        userId: calendarData.user_id,
+        type: 'appointment_request',
+        title: 'New Appointment Request',
+        message: `@${user.user_metadata?.username || 'A client'} requested an appointment "${appointForm.title}" for ${selectedDate.toLocaleDateString()} at ${appointForm.time}.`,
+        link: '/chats?tab=appointments',
+        referenceId: newAppt?.id
+      });
+
+      alert(`Appointment request sent to ${calendarData.name}! The owner has been notified. You can review and track your appointments in your Chats page.`);
       setIsAppointOpen(false);
       setAppointForm({ title: '', description: '', isPrivate: false, time: '10:00' });
       fetchAppointments(selectedDate, calendarData, admins);
     } catch (err) {
-      alert('Error creating appointment (Make sure appointments table exists!): ' + err.message);
+      alert('Error creating appointment: ' + err.message);
     } finally {
       setIsAppointing(false);
+    }
+  };
+
+  const handleAcceptAppointment = async (appt) => {
+    try {
+      // 1. Update appointment status
+      const { error: updateErr } = await supabase
+        .from('appointments')
+        .update({ status: 'accepted' })
+        .eq('id', appt.id);
+        
+      if (updateErr) throw updateErr;
+
+      // 2. Find or create chat room between owner and requester
+      const ownerId = calendarData.user_id;
+      const clientId = appt.user_id;
+
+      const { data: existingRooms } = await supabase
+        .from('chat_rooms')
+        .select('*')
+        .or(`and(initiator_id.eq.${ownerId},receiver_id.eq.${clientId}),and(initiator_id.eq.${clientId},receiver_id.eq.${ownerId})`);
+
+      let targetRoomId = null;
+
+      if (existingRooms && existingRooms.length > 0) {
+        targetRoomId = existingRooms[0].id;
+        if (existingRooms[0].status !== 'accepted') {
+          await supabase
+            .from('chat_rooms')
+            .update({ status: 'accepted', updated_at: new Date().toISOString() })
+            .eq('id', targetRoomId);
+        }
+      } else {
+        const { data: newRoom, error: roomErr } = await supabase
+          .from('chat_rooms')
+          .insert({
+            initiator_id: ownerId,
+            receiver_id: clientId,
+            status: 'accepted'
+          })
+          .select()
+          .single();
+
+        if (roomErr) throw roomErr;
+        targetRoomId = newRoom.id;
+      }
+
+      // 3. Post confirmation message into chat
+      let parsedNotes = { title: 'Appointment', description: '' };
+      try { parsedNotes = JSON.parse(appt.notes); } catch(e) {}
+      const timeStr = new Date(appt.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dateStr = new Date(appt.start_time).toLocaleDateString();
+
+      await supabase.from('messages').insert({
+        chat_room_id: targetRoomId,
+        sender_id: user.id,
+        content: `📅 Appointment Confirmed: "${parsedNotes.title}" on ${dateStr} at ${timeStr}. Chat has begun!`
+      });
+
+      // 4. Notify requester
+      await createNotification({
+        userId: clientId,
+        type: 'appointment_accepted',
+        title: 'Appointment Accepted!',
+        message: `@${user.user_metadata?.username || 'Owner'} accepted your appointment for "${parsedNotes.title}".`,
+        link: `/chats/${targetRoomId}`,
+        referenceId: appt.id
+      });
+
+      navigate(`/chats/${targetRoomId}`);
+    } catch (err) {
+      alert('Error accepting appointment: ' + err.message);
+    }
+  };
+
+  const handleDeclineAppointment = async (appt) => {
+    if (!window.confirm("Are you sure you want to decline this appointment request?")) return;
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: 'declined' })
+        .eq('id', appt.id);
+        
+      if (error) throw error;
+
+      let parsedNotes = { title: 'Appointment' };
+      try { parsedNotes = JSON.parse(appt.notes); } catch(e) {}
+
+      await createNotification({
+        userId: appt.user_id,
+        type: 'appointment_declined',
+        title: 'Appointment Declined',
+        message: `Your appointment request "${parsedNotes.title}" for ${calendarData.name} was declined.`,
+        link: '/chats?tab=appointments',
+        referenceId: appt.id
+      });
+
+      fetchAppointments(selectedDate, calendarData, admins);
+    } catch (err) {
+      alert('Error declining appointment: ' + err.message);
+    }
+  };
+
+  const handleOpenChat = async (otherUserId) => {
+    try {
+      const { data: existingRooms } = await supabase
+        .from('chat_rooms')
+        .select('*')
+        .or(`and(initiator_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(initiator_id.eq.${otherUserId},receiver_id.eq.${user.id})`);
+
+      if (existingRooms && existingRooms.length > 0) {
+        navigate(`/chats/${existingRooms[0].id}`);
+      } else {
+        const { data: newRoom, error } = await supabase
+          .from('chat_rooms')
+          .insert({
+            initiator_id: user.id,
+            receiver_id: otherUserId,
+            status: 'accepted'
+          })
+          .select()
+          .single();
+
+        if (!error && newRoom) {
+          navigate(`/chats/${newRoom.id}`);
+        }
+      }
+    } catch (err) {
+      console.error('Error opening chat:', err);
     }
   };
 
@@ -641,24 +798,106 @@ function Calendar({ user }) {
                   parsedNotes = JSON.parse(appt.notes);
                 } catch(e) {}
                 const timeStr = new Date(appt.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const isRequester = user && appt.user_id === user.id;
                 return (
-                  <div key={idx} style={{ padding: '1rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <strong style={{ display: 'block', fontSize: '1.1rem', marginBottom: '0.25rem' }}>{parsedNotes.title}</strong>
-                      <span style={{ color: 'var(--text-muted)' }}>{timeStr} • {parsedNotes.description}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                      {appt.is_private && (
-                        <span style={{ fontSize: '0.75rem', background: 'var(--hover-bg)', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}>Private</span>
-                      )}
-                      {(isOwner || isCurrentAdmin) && (
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: appt.status === 'pending' ? '#f59e0b' : '#3b82f6', textTransform: 'uppercase' }}>
-                          {appt.status}
-                        </span>
-                      )}
+                  <div key={idx} style={{ padding: '1.25rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                          <strong style={{ fontSize: '1.1rem' }}>{parsedNotes.title}</strong>
+                          {appt.is_private && (
+                            <span style={{ fontSize: '0.7rem', background: 'var(--hover-bg)', padding: '0.15rem 0.4rem', borderRadius: '4px', border: '1px solid var(--border)' }}>Private</span>
+                          )}
+                        </div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                          {timeStr} • {parsedNotes.description}
+                        </div>
+                        {appt.clientProfile && (
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Client:</span>
+                            <Link to={`/profile/${appt.clientProfile.username}`} style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 500 }}>
+                              @{appt.clientProfile.username}
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        {(isOwner || isCurrentAdmin) ? (
+                          <>
+                            {appt.status === 'pending' && (
+                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b', textTransform: 'uppercase' }}>
+                                  Pending Request
+                                </span>
+                                <button 
+                                  className="primary-button" 
+                                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                                  onClick={() => handleAcceptAppointment(appt)}
+                                >
+                                  ✓ Accept & Chat
+                                </button>
+                                <button 
+                                  className="login-button" 
+                                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', color: '#ef4444', borderColor: '#ef4444' }}
+                                  onClick={() => handleDeclineAppointment(appt)}
+                                >
+                                  Decline
+                                </button>
+                              </div>
+                            )}
+                            {appt.status === 'accepted' && (
+                              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#10b981', textTransform: 'uppercase' }}>
+                                  Accepted
+                                </span>
+                                <button 
+                                  className="primary-button" 
+                                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                                  onClick={() => handleOpenChat(appt.user_id)}
+                                >
+                                  💬 Chat
+                                </button>
+                              </div>
+                            )}
+                            {appt.status === 'declined' && (
+                              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444', textTransform: 'uppercase' }}>
+                                Declined
+                              </span>
+                            )}
+                          </>
+                        ) : isRequester ? (
+                          <>
+                            {appt.status === 'pending' && (
+                              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b', textTransform: 'uppercase' }}>
+                                Pending Review
+                              </span>
+                            )}
+                            {appt.status === 'accepted' && (
+                              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#10b981', textTransform: 'uppercase' }}>
+                                  Accepted
+                                </span>
+                                <button 
+                                  className="primary-button" 
+                                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                                  onClick={() => handleOpenChat(calendarData.user_id)}
+                                >
+                                  💬 Chat with Owner
+                                </button>
+                              </div>
+                            )}
+                            {appt.status === 'declined' && (
+                              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444', textTransform: 'uppercase' }}>
+                                Declined
+                              </span>
+                            )}
+                          </>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                )
+                );
               })}
             </div>
           ) : (

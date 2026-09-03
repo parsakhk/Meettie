@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
 import './App.css';
 import { supabase } from './lib/supabase.js';
+import { getUnreadCounts } from './lib/notifications.js';
 import Profile from './Profile';
 import Search from './Search';
 import Calendar from './Calendar';
@@ -50,48 +51,34 @@ function Navbar({ theme, toggleTheme, user, onLogout }) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCounts, setUnreadCounts] = useState({ total: 0, appointments: 0, chats: 0 });
 
   useEffect(() => {
     if (!user) return;
 
-    const fetchUnread = async () => {
-      // Fetch rooms where user is participant
-      const { data: rooms } = await supabase
-        .from('chat_rooms')
-        .select('id, status, receiver_id')
-        .or(`initiator_id.eq.${user.id},receiver_id.eq.${user.id}`);
-      
-      if (!rooms || rooms.length === 0) return;
-      const roomIds = rooms.map(r => r.id);
-      
-      // Calculate pending requests (received by user)
-      const pendingCount = rooms.filter(r => r.status === 'pending' && r.receiver_id === user.id).length;
-
-      // Calculate unread messages
-      const { data: msgs } = await supabase
-        .from('messages')
-        .select('id')
-        .in('chat_room_id', roomIds)
-        .eq('is_read', false)
-        .neq('sender_id', user.id);
-        
-      setUnreadCount(pendingCount + (msgs ? msgs.length : 0));
+    const fetchCounts = async () => {
+      const counts = await getUnreadCounts(user.id);
+      setUnreadCounts(counts);
     };
 
-    fetchUnread();
+    fetchCounts();
 
     const roomsChannel = supabase.channel('rooms-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_rooms' }, fetchUnread)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_rooms' }, fetchCounts)
       .subscribe();
       
     const msgsChannel = supabase.channel('msgs-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, fetchUnread)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, fetchCounts)
+      .subscribe();
+
+    const apptsChannel = supabase.channel('appts-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, fetchCounts)
       .subscribe();
 
     return () => {
       supabase.removeChannel(roomsChannel);
       supabase.removeChannel(msgsChannel);
+      supabase.removeChannel(apptsChannel);
     };
   }, [user]);
 
@@ -155,20 +142,24 @@ function Navbar({ theme, toggleTheme, user, onLogout }) {
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', position: 'relative' }}>
               <button onClick={() => setShowDropdown(!showDropdown)} className="login-button" style={{ position: 'relative' }}>
                 Profile
-                {unreadCount > 0 && (
+                {unreadCounts.total > 0 && (
                   <span style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#ef4444', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {unreadCount}
+                    {unreadCounts.total}
                   </span>
                 )}
               </button>
               {showDropdown && (
-                <div style={{ position: 'absolute', top: '100%', right: '80px', marginTop: '0.5rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', zIndex: 100, display: 'flex', flexDirection: 'column', minWidth: '150px', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: '100%', right: '80px', marginTop: '0.5rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100, display: 'flex', flexDirection: 'column', minWidth: '180px', overflow: 'hidden' }}>
                   <Link to={`/profile/${user.user_metadata?.username}`} className="nav-dropdown-item" onClick={() => setShowDropdown(false)} style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border)', color: 'var(--text)' }}>
                     My Profile
                   </Link>
-                  <Link to="/chats" className="nav-dropdown-item" onClick={() => setShowDropdown(false)} style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text)' }}>
+                  <Link to="/chats" className="nav-dropdown-item" onClick={() => setShowDropdown(false)} style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text)' }}>
                     Chats
-                    {unreadCount > 0 && <span style={{ background: '#ef4444', color: 'white', borderRadius: '10px', padding: '2px 6px', fontSize: '0.75rem' }}>{unreadCount}</span>}
+                    {unreadCounts.chats > 0 && <span style={{ background: '#ef4444', color: 'white', borderRadius: '10px', padding: '2px 6px', fontSize: '0.75rem' }}>{unreadCounts.chats}</span>}
+                  </Link>
+                  <Link to="/chats?tab=appointments" className="nav-dropdown-item" onClick={() => setShowDropdown(false)} style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text)' }}>
+                    Appointments
+                    {unreadCounts.appointments > 0 && <span style={{ background: '#3b82f6', color: 'white', borderRadius: '10px', padding: '2px 6px', fontSize: '0.75rem' }}>{unreadCounts.appointments}</span>}
                   </Link>
                 </div>
               )}
