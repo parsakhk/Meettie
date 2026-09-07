@@ -306,12 +306,19 @@ function RegisterGraphic() {
   );
 }
 
-function Login() {
+function Login({ user }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) {
+      const username = user.user_metadata?.username;
+      navigate(username ? `/profile/${username}` : '/');
+    }
+  }, [user, navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -319,15 +326,20 @@ function Login() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
+      // Clear any existing stale session before authenticating
+      await supabase.auth.signOut();
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
         password,
       });
       
       if (error) {
+        // Explicitly clear session on error so no stale credentials linger
+        await supabase.auth.signOut();
         setError(error.message);
       } else {
-        const username = data.user?.user_metadata?.username;
+        const username = data?.user?.user_metadata?.username;
         if (username) {
           navigate(`/profile/${username}`);
         } else {
@@ -376,7 +388,8 @@ function Login() {
   );
 }
 
-function Register() {
+function Register({ user }) {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -388,6 +401,13 @@ function Register() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      const username = user.user_metadata?.username;
+      navigate(username ? `/profile/${username}` : '/');
+    }
+  }, [user, navigate]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
@@ -523,15 +543,20 @@ function App() {
 
     // Check active session and sets the user
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-    })
+      setUser(session?.user ?? null);
+    });
 
     // Listen for changes on auth state (logged in, signed out, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-    })
+      const newUser = session?.user ?? null;
+      setUser(prev => {
+        if (!prev && !newUser) return null;
+        if (prev?.id === newUser?.id) return prev;
+        return newUser;
+      });
+    });
 
-    return () => subscription.unsubscribe()
+    return () => subscription.unsubscribe();
   }, []);
 
   const toggleTheme = () => {
@@ -552,14 +577,14 @@ function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            <Route path="/login" element={<Login user={user} />} />
+            <Route path="/register" element={<Register user={user} />} />
             <Route path="/verify" element={<Verify />} />
             <Route path="/profile/:username" element={<Profile user={user} />} />
             <Route path="/search" element={<Search />} />
             <Route path="/calendar/:slug" element={<Calendar user={user} />} />
-            <Route path="/chats" element={user ? <Chats user={user} /> : <Login />} />
-            <Route path="/chats/:roomId" element={user ? <Chats user={user} /> : <Login />} />
+            <Route path="/chats" element={user ? <Chats user={user} /> : <Login user={user} />} />
+            <Route path="/chats/:roomId" element={user ? <Chats user={user} /> : <Login user={user} />} />
           </Routes>
         </main>
         <Footer />

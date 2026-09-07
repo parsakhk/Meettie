@@ -39,13 +39,18 @@ function Profile({ user }) {
 
   useEffect(() => {
     if (username) {
+      if (profileData.username !== username) {
+        setLoading(true);
+      }
       fetchProfileAndCalendars();
     }
-  }, [username, user]);
+  }, [username, user?.id]);
 
   const fetchProfileAndCalendars = async () => {
     try {
-      setLoading(true);
+      if (!profileId || profileData.username !== username) {
+        setLoading(true);
+      }
       // Fetch Profile by username
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
