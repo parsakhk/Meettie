@@ -141,6 +141,8 @@ function Calendar({ user }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [appointments, setAppointments] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [clientAppointments, setClientAppointments] = useState([]);
   
   useEffect(() => {
     if (slug) {
@@ -151,6 +153,18 @@ function Calendar({ user }) {
   useEffect(() => {
     if (calendarData) {
       fetchAppointments(selectedDate, calendarData, admins);
+      fetchPendingAndClientAppointments(calendarData);
+
+      const apptChannel = supabase.channel(`cal_appts_${calendarData.id}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter: `calendar_id=eq.${calendarData.id}` }, () => {
+          fetchAppointments(selectedDate, calendarData, admins);
+          fetchPendingAndClientAppointments(calendarData);
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(apptChannel);
+      };
     }
   }, [selectedDate, calendarData, admins, user]);
 
@@ -264,6 +278,58 @@ function Calendar({ user }) {
       setAppointments(visibleAppts);
     } catch (err) {
       console.error("Failed to fetch appointments", err);
+    }
+  };
+
+  const fetchPendingAndClientAppointments = async (calData) => {
+    try {
+      if (!calData) return;
+
+      // 1. Fetch all pending requests for this calendar (for owner / admins)
+      const { data: pendingData, error: pendingErr } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('calendar_id', calData.id)
+        .eq('status', 'pending')
+        .order('start_time', { ascending: true });
+
+      if (!pendingErr && pendingData) {
+        const userIds = [...new Set(pendingData.map(p => p.user_id).filter(Boolean))];
+        let profileMap = {};
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, username, avatar_url, first_name, last_name')
+            .in('id', userIds);
+          if (profiles) {
+            profiles.forEach(p => { profileMap[p.id] = p; });
+          }
+        }
+        setPendingRequests(pendingData.map(p => ({
+          ...p,
+          clientProfile: profileMap[p.user_id] || null
+        })));
+      } else {
+        setPendingRequests([]);
+      }
+
+      // 2. If logged in, fetch user's own appointments on this calendar (for client booking tracking)
+      if (user) {
+        const { data: myData, error: myErr } = await supabase
+          .from('appointments')
+          .select('*')
+          .eq('calendar_id', calData.id)
+          .eq('user_id', user.id)
+          .order('start_time', { ascending: false });
+
+        if (!myErr && myData) {
+          setClientAppointments(myData);
+        } else {
+          setClientAppointments([]);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching pending/client appointments:', err);
     }
   };
 
@@ -422,6 +488,7 @@ function Calendar({ user }) {
       setIsAppointOpen(false);
       setAppointForm({ title: '', description: '', isPrivate: false, time: '10:00' });
       fetchAppointments(selectedDate, calendarData, admins);
+      fetchPendingAndClientAppointments(calendarData);
     } catch (err) {
       alert('Error creating appointment: ' + err.message);
     } finally {
@@ -524,6 +591,7 @@ function Calendar({ user }) {
       });
 
       fetchAppointments(selectedDate, calendarData, admins);
+      fetchPendingAndClientAppointments(calendarData);
     } catch (err) {
       alert('Error declining appointment: ' + err.message);
     }
@@ -751,6 +819,167 @@ function Calendar({ user }) {
             </button>
           )}
         </div>
+
+        {/* Admin / Owner Pending Requests Inbox */}
+        {(isOwner || isCurrentAdmin) && (
+          <div className="pending-inbox-section" style={{ marginTop: '1.5rem', padding: '1.5rem', background: 'var(--bg)', borderRadius: '12px', border: '1px solid var(--border)', boxShadow: '0 4px 12px rgba(0,0,0,0.04)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.15rem' }}>
+                  📥 Pending Requests Inbox
+                </h3>
+                <span style={{ 
+                  background: pendingRequests.length > 0 ? '#ef4444' : 'var(--hover-bg)', 
+                  color: pendingRequests.length > 0 ? 'white' : 'var(--text-muted)', 
+                  padding: '2px 8px', 
+                  borderRadius: '12px', 
+                  fontSize: '0.75rem', 
+                  fontWeight: 'bold' 
+                }}>
+                  {pendingRequests.length}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <Link to="/chats" className="login-button" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', padding: '0.4rem 0.85rem', textDecoration: 'none' }}>
+                  💬 Access Chats
+                </Link>
+              </div>
+            </div>
+
+            {pendingRequests.length === 0 ? (
+              <div style={{ padding: '1.25rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem', background: 'var(--hover-bg)', borderRadius: '8px' }}>
+                No pending appointment requests awaiting review.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {pendingRequests.map(req => {
+                  let parsedNotes = { title: 'Appointment', description: '' };
+                  try { parsedNotes = JSON.parse(req.notes); } catch(e) {}
+                  const dateStr = new Date(req.start_time).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                  const timeStr = new Date(req.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                  return (
+                    <div key={req.id} style={{ padding: '1.25rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, minWidth: '260px' }}>
+                        {req.clientProfile?.avatar_url ? (
+                          <img src={req.clientProfile.avatar_url} alt="" style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                            {req.clientProfile?.username?.charAt(0).toUpperCase() || '?'}
+                          </div>
+                        )}
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <strong style={{ fontSize: '1.05rem' }}>{parsedNotes.title}</strong>
+                            {req.is_private && (
+                              <span style={{ fontSize: '0.65rem', background: 'var(--hover-bg)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border)' }}>Private</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                            Requested by <Link to={`/profile/${req.clientProfile?.username}`} style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 500 }}>@{req.clientProfile?.username || 'client'}</Link> • 📅 {dateStr} at {timeStr}
+                          </div>
+                          {parsedNotes.description && (
+                            <div style={{ fontSize: '0.825rem', marginTop: '0.35rem', color: 'var(--text)' }}>
+                              "{parsedNotes.description}"
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button
+                          className="primary-button"
+                          style={{ padding: '0.45rem 1rem', fontSize: '0.85rem' }}
+                          onClick={() => handleAcceptAppointment(req)}
+                        >
+                          ✓ Accept & Start Chat
+                        </button>
+                        <button
+                          className="login-button"
+                          style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', color: '#ef4444', borderColor: '#ef4444' }}
+                          onClick={() => handleDeclineAppointment(req)}
+                        >
+                          Decline
+                        </button>
+                        <button
+                          className="login-button"
+                          style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem' }}
+                          onClick={() => handleOpenChat(req.user_id)}
+                          title="Message client in chats"
+                        >
+                          💬 Chat
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Client Appointments & Direct Chat Link Card */}
+        {(!isOwner && !isCurrentAdmin && clientAppointments.length > 0) && (
+          <div className="client-appointments-section" style={{ marginTop: '1.5rem', padding: '1.25rem', background: 'var(--bg)', borderRadius: '12px', border: '1px solid var(--border)', boxShadow: '0 4px 12px rgba(0,0,0,0.04)' }}>
+            <h3 style={{ margin: 0, marginBottom: '0.75rem', fontSize: '1.1rem' }}>
+              Your Appointments with {calendarData.name}
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {clientAppointments.map(appt => {
+                let parsedNotes = { title: 'Appointment', description: '' };
+                try { parsedNotes = JSON.parse(appt.notes); } catch(e) {}
+                const dateStr = new Date(appt.start_time).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                const timeStr = new Date(appt.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const isAccepted = appt.status === 'accepted';
+                const isPending = appt.status === 'pending';
+
+                return (
+                  <div key={appt.id} style={{ padding: '1rem', background: 'var(--hover-bg)', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <strong style={{ fontSize: '1rem' }}>{parsedNotes.title}</strong>
+                        <span style={{ 
+                          fontSize: '0.7rem', 
+                          fontWeight: 700, 
+                          textTransform: 'uppercase', 
+                          padding: '2px 6px', 
+                          borderRadius: '4px',
+                          color: isAccepted ? '#10b981' : isPending ? '#f59e0b' : '#ef4444',
+                          background: isAccepted ? 'rgba(16, 185, 129, 0.15)' : isPending ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)'
+                        }}>
+                          {appt.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                        📅 {dateStr} at {timeStr}
+                      </div>
+                    </div>
+
+                    {isAccepted ? (
+                      <button
+                        className="primary-button"
+                        style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem' }}
+                        onClick={() => handleOpenChat(calendarData.user_id)}
+                      >
+                        💬 Open Chat with Owner (@{owner?.username || 'owner'})
+                      </button>
+                    ) : isPending ? (
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                        ⏳ Waiting for owner to confirm request...
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.8rem', color: '#ef4444' }}>
+                        Request declined
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         
         {/* Interactive Calendar Grid */}
         <div className="calendar-grid-container" style={{ marginTop: '2rem', background: 'var(--bg)', padding: '1.5rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
