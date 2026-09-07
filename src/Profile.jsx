@@ -88,20 +88,34 @@ function Profile({ user }) {
       let allCals = ownedCals ? [...ownedCals] : [];
       
       // Fetch Admin Calendars
-      const { data: accessData } = await supabase
+      const cleanUser = profile.username.replace(/^@/, '').toLowerCase();
+      const { data: accessData, error: accessErr } = await supabase
         .from('calendar_access')
         .select('calendar_id')
-        .in('username', [profile.username, '@' + profile.username]);
+        .in('username', [
+          cleanUser,
+          '@' + cleanUser,
+          profile.username,
+          '@' + profile.username
+        ]);
         
+      if (accessErr) {
+        console.error('Error fetching calendar access:', accessErr);
+      }
+
       if (accessData && accessData.length > 0) {
         const adminCalIds = accessData.map(a => a.calendar_id);
         if (adminCalIds.length > 0) {
-          const { data: adminCals } = await supabase
+          const { data: adminCals, error: adminCalsErr } = await supabase
             .from('calendars')
             .select('*, calendar_likes(*)')
             .in('id', adminCalIds)
             .order('created_at', { ascending: false });
             
+          if (adminCalsErr) {
+            console.error('Error fetching admin calendars:', adminCalsErr);
+          }
+
           if (adminCals) {
             const existingIds = new Set(allCals.map(c => c.id));
             const newAdminCals = adminCals.filter(c => !existingIds.has(c.id));
@@ -357,7 +371,8 @@ function Profile({ user }) {
         savedCalId = data.id;
 
         // Re-sync access: delete old, insert new
-        await supabase.from('calendar_access').delete().eq('calendar_id', savedCalId);
+        const { error: delErr } = await supabase.from('calendar_access').delete().eq('calendar_id', savedCalId);
+        if (delErr) throw delErr;
 
         setBusinesses(prev => prev.map(c => c.id === savedCalId ? { 
           ...c, 
@@ -397,11 +412,15 @@ function Profile({ user }) {
 
       // Handle Admins/Users (both for create and update)
       if (allowedUsers.length > 0) {
-        const accessRows = allowedUsers.map(un => ({
-          calendar_id: savedCalId,
-          username: un
-        }));
-        await supabase.from('calendar_access').insert(accessRows);
+        const accessRows = allowedUsers.map(un => {
+          const clean = un.replace(/^@/, '').toLowerCase().trim();
+          return {
+            calendar_id: savedCalId,
+            username: '@' + clean
+          };
+        });
+        const { error: accessErr } = await supabase.from('calendar_access').insert(accessRows);
+        if (accessErr) throw accessErr;
       }
 
       setIsCalendarModalOpen(false);

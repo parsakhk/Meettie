@@ -213,14 +213,14 @@ function Calendar({ user }) {
         .eq('calendar_id', calData.id);
         
       if (accessList && accessList.length > 0) {
-        const usernames = accessList.map(a => a.username.replace('@', ''));
-        const { data: adminProfiles } = await supabase
+        const usernames = accessList.map(a => a.username.replace(/^@/, '').toLowerCase());
+        const { data: allProfiles } = await supabase
           .from('profiles')
-          .select('*')
-          .in('username', usernames);
+          .select('*');
           
-        if (adminProfiles) {
-          setAdmins(adminProfiles);
+        if (allProfiles) {
+          const matched = allProfiles.filter(p => p.username && usernames.includes(p.username.toLowerCase()));
+          setAdmins(matched);
         }
       }
     } catch (error) {
@@ -423,15 +423,16 @@ function Calendar({ user }) {
     if (!window.confirm(`Are you sure you want to remove @${adminUsername} as admin?`)) return;
     
     try {
+      const cleanUser = adminUsername.replace(/^@/, '').toLowerCase();
       const { error } = await supabase
         .from('calendar_access')
         .delete()
         .eq('calendar_id', calendarData.id)
-        .eq('username', '@' + adminUsername);
+        .in('username', ['@' + cleanUser, cleanUser, '@' + adminUsername, adminUsername]);
         
       if (error) throw error;
       
-      setAdmins(prev => prev.filter(a => a.username !== adminUsername));
+      setAdmins(prev => prev.filter(a => a.username.toLowerCase() !== cleanUser));
     } catch (err) {
       alert('Error removing admin: ' + err.message);
     }
